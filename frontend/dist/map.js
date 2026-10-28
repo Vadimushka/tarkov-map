@@ -22,6 +22,7 @@ window.TMap = (() => {
   let vb = null;         // текущий viewBox
   let floorGroups = [];  // этажи внутри SVG
   let baseLayer = "", floor = "";
+  let layerIds = new Set(); // этажи кроме базового
   let markers = [];      // выходы и переходы последней отрисовки — для вписывания
 
   const FACTION = { pmc: "ЧВК", scav: "Дикие", shared: "Совместный" };
@@ -53,6 +54,7 @@ window.TMap = (() => {
       floorGroups = [...inner.children].filter((n) => n.nodeName === "g" && n.id);
     }
     baseLayer = layers.length ? layers[0].ID : "";
+    layerIds = new Set(layers.slice(1).map((l) => l.ID));
     floor = baseLayer;
     markers = [];
     vb = null; // вписать после первой отрисовки меток
@@ -141,13 +143,17 @@ window.TMap = (() => {
     applyFloor();
   }
 
+  // Как в tarkov.dev: базовый слой виден всегда, вместе с ним — группы с data-keep-with-group
+  // (первые этажи зданий, лестницы) и всё, что не является отдельным этажом. Выбран этаж со
+  // своей группой — база приглушается, остальные этажи скрыты. У этажа только из тайлов своей
+  // группы нет — показываем базу как есть.
   function applyFloor() {
-    // этажа без своей группы в SVG (только тайлы) нет — показываем базовый слой
-    let gi = floorGroups.findIndex((g) => g.id === floor);
-    if (gi < 0) gi = floorGroups.findIndex((g) => g.id === baseLayer);
-    floorGroups.forEach((g, i) => {
-      g.classList.toggle("floor-hidden", gi >= 0 && i > gi);
-      g.classList.toggle("floor-dim", gi >= 0 && i < gi);
+    const isBase = (g) => g.dataset.keepWithGroup === baseLayer || !layerIds.has(g.id);
+    const own = floorGroups.some((g) => g.id === floor && !isBase(g));
+    floorGroups.forEach((g) => {
+      const base = isBase(g);
+      g.classList.toggle("floor-hidden", !base && !(own && g.id === floor));
+      g.classList.toggle("floor-dim", base && own);
     });
     overlay.querySelectorAll("[data-layer]").forEach((n) => (n.style.opacity = n.dataset.layer === floor ? 1 : 0.35));
   }

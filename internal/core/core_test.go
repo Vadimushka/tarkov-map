@@ -1,7 +1,9 @@
 package core
 
 import (
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,15 +28,30 @@ func (fakeSrc) MapByScene(scene string) (data.GameMap, bool) {
 			Transits: []data.Transit{{Name: "Переход на Таможню", Pos: mapgeo.Vec3{X: 280, Y: 20, Z: 435}}}}, true
 	case "maps/laboratory_preset.bundle":
 		return data.GameMap{NormalizedName: "the-lab", Name: "Лаборатория", ScenePath: scene}, true
+	case "maps/sandbox_start_preset.bundle": // обучающий Эпицентр: ни выходов, ни переходов
+		return data.GameMap{NormalizedName: "ground-zero", Name: "Эпицентр", ScenePath: scene}, true
 	}
 	return data.GameMap{}, false
 }
 
 func (fakeSrc) MapDef(n string) (mapgeo.MapDef, bool) {
-	if n == "interchange" {
+	if n == "interchange" || n == "ground-zero" {
 		return ic, true
 	}
 	return mapgeo.MapDef{}, false
+}
+
+// Фронтенд перебирает Markers: null вместо [] ломал отрисовку карты без меток.
+func TestViewWithoutMarkers(t *testing.T) {
+	c := New(fakeSrc{})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, At: at(19, 47, 26), Bundle: "maps/sandbox_start_preset.bundle"})
+	b, err := json.Marshal(c.View())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"Markers":[]`) || strings.Contains(string(b), `"Layers":null`) {
+		t.Errorf("View без меток: %s", b)
+	}
 }
 
 const (

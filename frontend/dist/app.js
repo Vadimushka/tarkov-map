@@ -91,9 +91,12 @@
 
   async function updateView() {
     const v = await go().GetView();
+    v.Markers = v.Markers || [];
+    v.Layers = v.Layers || [];
     if (!v.Supported) {
       view = null;
       mapID = null;
+      viewError = "";
       TMap.clear();
       showMessage();
       return;
@@ -105,10 +108,12 @@
       } catch (e) {
         view = null;
         mapID = null;
+        viewError = "Не удалось загрузить карту: " + e;
         TMap.clear();
-        showMessage("Не удалось загрузить карту: " + e);
+        showMessage();
         return;
       }
+      viewError = "";
       mapID = v.MapID;
       shotCount = 0;
       $("#map").hidden = false;
@@ -132,10 +137,12 @@
     $("#fit").disabled = false;
   }
 
-  function showMessage(text) {
+  // ошибка подложки живёт до следующей удачной загрузки: обновления статуса её не затирают
+  let viewError = "";
+  function showMessage() {
     $("#map").hidden = true;
     $("#msg").hidden = false;
-    $("#msg").textContent = text || (snapshot && snapshot.Message) || "Ждём загрузки карты в игре";
+    $("#msg").textContent = viewError || (snapshot && snapshot.Message) || "Ждём загрузки карты в игре";
     $("#center").disabled = true;
     $("#fit").disabled = true;
     buildFloors([]);

@@ -36,6 +36,7 @@ type App struct {
 	flagGame, flagShots string
 	cfgDir              string
 	store               *data.Store
+	sync                *data.Syncer
 	core                *core.Core
 
 	mu                sync.Mutex
@@ -64,18 +65,27 @@ func NewApp(flagGame, flagShots string) *App {
 	}
 	cfgDir := filepath.Join(base, "TarkovMap")
 	store := data.NewStore(cfgDir, &http.Client{Timeout: 30 * time.Second}, time.Now)
-	return &App{
+	a := &App{
 		flagGame: flagGame, flagShots: flagShots, cfgDir: cfgDir,
 		store: store, core: core.New(store),
 		set: settings.Load(cfgDir), mode: "pve", loading: true,
 	}
+	// фоновое обновление данных: метки пересчитываются по свежим данным
+	a.sync = data.NewSyncer(store, func() {
+		a.core.SetSource(a.store)
+		a.markDirty()
+	})
+	return a
 }
 
+// startup: данные из кэша (сеть — в фоне или, без кэша, сразу), затем реплей
+// текущей сессии логов и скринов и слежение.
 func (a *App) startup(ctx context.Context) {
 	a.mu.Lock()
 	a.ctx = ctx
+	mode := a.mode
 	a.mu.Unlock()
-	a.loadData(false)
+	a.useData(mode)
 	a.startWatching()
 	go a.loop()
 }
@@ -138,11 +148,13 @@ func (a *App) markDirty() {
 	a.mu.Unlock()
 }
 
-func (a *App) loadData(force bool) {
-	a.mu.Lock()
-	mode := a.mode
-	a.mu.Unlock()
-	err := a.store.Load(mode, force)
+// useData делает текущими данные режима (см. data.Syncer) и обновляет сообщение об ошибке.
+func (a *App) useData(mode string) {
+	a.setDataErr(a.sync.Use(mode))
+	a.core.SetSource(a.store)
+}
+
+func (a *App) setDataErr(err error) {
 	msg := ""
 	if errors.Is(err, data.ErrNoData) {
 		msg = "Нет данных карт: нет сети и нет кэша. Подключитесь к интернету и нажмите «Обновить данные»."
@@ -157,15 +169,17 @@ func (a *App) loadData(force bool) {
 }
 
 func (a *App) onLogEvent(e gamelog.Event) {
-	if e.Kind == gamelog.EvMode {
+	switch e.Kind {
+	case gamelog.EvMode:
 		a.mu.Lock()
-		changed := e.Mode != a.mode
 		a.mode = e.Mode
 		a.mu.Unlock()
-		if changed {
-			a.loadData(false)
-			a.core.SetSource(a.store)
-		}
+	case gamelog.EvMap:
+		// данные режима — к загрузке карты: на входе в игру режим мигает Pve → Regular → Pve
+		a.mu.Lock()
+		mode := a.mode
+		a.mu.Unlock()
+		a.useData(mode)
 	}
 	a.core.OnLogEvent(e)
 	a.markDirty()
@@ -303,16 +317,28 @@ func (a *App) SetPaths(gameDir, shotsDir string) error {
 	return nil
 }
 
+// RefreshData — кнопка «Обновить данные»: данные режима и SVG текущей карты из сети
+// сейчас; без сети всё остаётся на кэше, а ошибка уходит в ответ.
 func (a *App) RefreshData() error {
-	a.loadData(true)
-	a.core.SetSource(a.store)
-	a.flush()
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.dataErr != "" {
-		return errors.New(a.dataErr)
+	mode := a.mode
+	a.mu.Unlock()
+	err := a.sync.Refresh(mode)
+	switch {
+	case err == nil:
+		a.setDataErr(nil)
+	case a.sync.Mode() != mode: // данных режима нет совсем — это в статус
+		a.setDataErr(data.ErrNoData)
 	}
-	return nil
+	a.core.SetSource(a.store)
+	if id := a.core.Snapshot().MapID; err == nil && id != "" {
+		if def, ok := a.store.MapDef(id); ok {
+			err = a.store.RefreshSVG(def)
+		}
+	}
+	a.markDirty()
+	a.flush()
+	return err
 }
 
 func (a *App) GetPaths() Paths {

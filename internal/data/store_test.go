@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,11 +17,14 @@ type fakeServer struct {
 	hits     atomic.Int32
 	svgMain  bool // отдавать ли SVG по основному адресу
 	fallback string
+	fail     atomic.Bool   // отвечать 500 на всё
+	hang     chan struct{} // не nil — запросы висят, пока канал не закрыт
 }
 
 func newServer(t *testing.T) *fakeServer {
 	t.Helper()
-	fs := &fakeServer{svgMain: true}
+	fs := &fakeServer{svgMain: true, hang: make(chan struct{})}
+	close(fs.hang) // по умолчанию не висим; hangUntilCleanup включает
 	files := map[string]string{
 		"/pve/maps":            "testdata/pve_maps.json",
 		"/pve/maps_ru":         "testdata/pve_maps_ru.json",
@@ -30,6 +34,11 @@ func newServer(t *testing.T) *fakeServer {
 	}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fs.hits.Add(1)
+		<-fs.hangCh()
+		if fs.fail.Load() {
+			http.Error(w, "fail", http.StatusInternalServerError)
+			return
+		}
 		if r.URL.Path == "/svg/Interchange.svg" && !fs.svgMain {
 			http.NotFound(w, r)
 			return
@@ -43,6 +52,37 @@ func newServer(t *testing.T) *fakeServer {
 	}))
 	t.Cleanup(fs.Close)
 	return fs
+}
+
+var hangMu sync.Mutex
+
+func (fs *fakeServer) hangCh() chan struct{} {
+	hangMu.Lock()
+	defer hangMu.Unlock()
+	return fs.hang
+}
+
+// hangUntilCleanup: «висящая» сеть (прокси без выхода наружу) до вызова release
+// или конца теста.
+func (fs *fakeServer) hangUntilCleanup(t *testing.T) (release func()) {
+	ch := make(chan struct{})
+	hangMu.Lock()
+	fs.hang = ch
+	hangMu.Unlock()
+	var once sync.Once
+	release = func() { once.Do(func() { close(ch) }) }
+	t.Cleanup(release) // раньше fs.Close: Close ждёт активные запросы
+	return release
+}
+
+// waitFor ждёт условие до 2 с.
+func waitFor(cond func() bool) bool {
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if cond() {
+			return true
+		}
+	}
+	return cond()
 }
 
 type clock struct{ t time.Time }
@@ -195,5 +235,86 @@ func TestSVGFallbackAndCache(t *testing.T) {
 	}
 	if n := fs.hits.Load() - before; n != 0 {
 		t.Errorf("повторный SVG: %d запросов", n)
+	}
+}
+
+func TestLoadCachedIgnoresAge(t *testing.T) {
+	_, fs, c, dir := loaded(t)
+	s := newStore(t, fs, c, dir) // новый запуск
+	fs.Close()
+	c.t = c.t.Add(30 * 24 * time.Hour)
+	if err := s.LoadCached("pve"); err != nil {
+		t.Fatalf("LoadCached на месячном кэше: %v", err)
+	}
+	if _, ok := s.MapByScene("maps/shopping_mall.bundle"); !ok {
+		t.Error("данные из кэша не разобраны")
+	}
+	if !s.Stale("pve") {
+		t.Error("месячный кэш не считается устаревшим")
+	}
+	if err := newStore(t, fs, c, t.TempDir()).LoadCached("pve"); !errors.Is(err, ErrNoData) {
+		t.Errorf("без кэша: %v, want ErrNoData", err)
+	}
+}
+
+func TestFetchReportsNetworkError(t *testing.T) {
+	_, fs, c, dir := loaded(t)
+	s := newStore(t, fs, c, dir)
+	fs.fail.Store(true)
+	if err := s.Fetch("pve"); err == nil {
+		t.Error("Fetch при ошибке сервера вернул nil")
+	}
+	if err := s.LoadCached("pve"); err != nil {
+		t.Errorf("кэш испорчен неудачным Fetch: %v", err)
+	}
+}
+
+func TestSVGStaleServedAtOnceAndRefreshed(t *testing.T) {
+	s, fs, c, dir := loaded(t)
+	d, _ := s.MapDef("interchange")
+	if _, err := s.SVG(d); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(25 * time.Hour)
+	release := fs.hangUntilCleanup(t)
+	before := fs.hits.Load()
+	done := make(chan struct{})
+	go func() { s.SVG(d); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("устаревший SVG ждёт сеть вместо отдачи из кэша")
+	}
+	if !waitFor(func() bool { return fs.hits.Load() > before }) {
+		t.Error("устаревший SVG не обновляется в фоне")
+	}
+	// дождаться конца фоновой закачки, иначе она пишет в уже удалённую папку теста
+	release()
+	p := filepath.Join(dir, "svg", "Interchange.svg")
+	if !waitFor(func() bool { _, busy := s.svgRefresh.Load(p); return !busy }) {
+		t.Error("фоновое обновление SVG не завершилось")
+	}
+}
+
+func TestRefreshSVG(t *testing.T) {
+	s, fs, c, _ := loaded(t)
+	d, _ := s.MapDef("interchange")
+	if _, err := s.SVG(d); err != nil {
+		t.Fatal(err)
+	}
+	before := fs.hits.Load()
+	c.t = c.t.Add(time.Minute)
+	if err := s.RefreshSVG(d); err != nil {
+		t.Fatalf("RefreshSVG: %v", err)
+	}
+	if fs.hits.Load() == before {
+		t.Error("RefreshSVG не перекачал свежий SVG")
+	}
+	fs.fail.Store(true)
+	if err := s.RefreshSVG(d); err == nil {
+		t.Error("RefreshSVG без сети вернул nil")
+	}
+	if svg, err := s.SVG(d); err != nil || svg == "" {
+		t.Errorf("после неудачного обновления SVG пропал: %v", err)
 	}
 }

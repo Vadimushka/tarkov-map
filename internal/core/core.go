@@ -137,7 +137,8 @@ func (c *Core) Snapshot() Snapshot {
 func (c *Core) View() MapView {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	v := MapView{MapID: c.gm.NormalizedName, Name: c.gm.Name, Supported: c.supported}
+	// пустые списки, а не nil: фронтенд перебирает их без проверок
+	v := MapView{MapID: c.gm.NormalizedName, Name: c.gm.Name, Supported: c.supported, Layers: []LayerInfo{}, Markers: []Marker{}}
 	if !c.supported {
 		return v
 	}

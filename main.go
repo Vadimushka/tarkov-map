@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"log"
 
 	"github.com/wailsapp/wails/v2"
@@ -13,7 +14,12 @@ import (
 var assets embed.FS
 
 func main() {
-	app := NewApp()
+	// Флаги для смоук-теста; в настройки не сохраняются.
+	game := flag.String("game", "", "папка игры (где лежит Logs)")
+	shotsDir := flag.String("shots", "", "папка скриншотов")
+	flag.Parse()
+
+	app := NewApp(*game, *shotsDir)
 
 	err := wails.Run(&options.App{
 		Title:            "Tarkov Map",

@@ -3,22 +3,84 @@
 <head>
 <meta charset="utf-8">
 <title>Tarkov Map</title>
-<style>
-  html, body { margin: 0; height: 100%; background: #14130f; color: #d8d2c0; font: 16px system-ui, sans-serif; }
-  #out { display: flex; height: 100%; align-items: center; justify-content: center; font-size: 64px; }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="out">…</div>
-<script>
-  window.addEventListener("load", async () => {
-    const out = document.getElementById("out");
-    try {
-      out.textContent = await window.go.main.App.Ping();
-    } catch (e) {
-      out.textContent = "ошибка: " + e;
-    }
-  });
-</script>
+<header id="ribbon">
+  <nav class="tabs" role="tablist" title="Двойной щелчок по вкладке — свернуть или развернуть ленту">
+    <button class="tab" role="tab" data-tab="main">Главная</button>
+    <button class="tab" role="tab" data-tab="settings">Настройки</button>
+    <span class="spacer"></span>
+    <button id="collapse" class="tab" title="Свернуть ленту">˄</button>
+  </nav>
+
+  <div class="pane" data-pane="main">
+    <section class="group">
+      <div class="items side" role="radiogroup" aria-label="Сторона">
+        <label><input type="radio" name="side" value="pmc">ЧВК</label>
+        <label><input type="radio" name="side" value="scav">Дикий</label>
+      </div>
+      <div class="caption">Сторона</div>
+    </section>
+    <section class="group">
+      <div class="items grid">
+        <label><input type="checkbox" data-f="route"><span class="sw" style="background:var(--route)"></span>Мой маршрут</label>
+        <label><input type="checkbox" data-f="extract_own"><span class="sw" data-own></span>Мои выходы</label>
+        <label><input type="checkbox" data-f="extract_shared"><span class="sw" style="background:var(--shared)"></span>Совместные выходы</label>
+        <label><input type="checkbox" data-f="transit"><span class="sw" style="background:var(--transit)"></span>Переходы</label>
+        <label><input type="checkbox" data-f="extract_other"><span class="sw" data-other></span>Выходы другой стороны</label>
+      </div>
+      <div class="caption">Показывать</div>
+    </section>
+    <section class="group" id="floors-group" hidden>
+      <div class="items grid" id="floors"></div>
+      <div class="caption">Этаж</div>
+    </section>
+    <section class="group">
+      <div class="items col">
+        <button id="center" disabled>Центр на мне</button>
+        <button id="fit" disabled>Вся карта</button>
+      </div>
+      <div class="caption">Вид</div>
+    </section>
+  </div>
+
+  <div class="pane" data-pane="settings">
+    <section class="group">
+      <div class="items paths">
+        <label>Игра (папка с Logs)<input id="game-dir" spellcheck="false"></label>
+        <label>Скриншоты<input id="shots-dir" spellcheck="false"></label>
+        <button id="save-paths">Сохранить</button>
+      </div>
+      <div class="caption">Пути — пустое поле значит «искать автоматически»</div>
+    </section>
+    <section class="group">
+      <div class="items col">
+        <span id="data-date" class="muted"></span>
+        <button id="refresh-data">Обновить данные</button>
+        <span id="settings-result" class="muted"></span>
+      </div>
+      <div class="caption">Данные</div>
+    </section>
+    <section class="group">
+      <div class="items col about">
+        <span>Карты: the-hideout / tarkov.dev, CC BY-NC-SA 4.0.</span>
+        <span>Данные: tarkov.dev</span>
+      </div>
+      <div class="caption">О программе</div>
+    </section>
+  </div>
+</header>
+
+<main id="view">
+  <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="msg" hidden></div>
+</main>
+
+<footer id="status"></footer>
+<div id="tip"></div>
+
+<script src="map.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -21,6 +21,7 @@ body { display: flex; flex-direction: column; }
 .items { flex: 1; display: flex; gap: 6px; align-items: center; }
 .items.grid { display: grid; grid-template-rows: repeat(3, auto); grid-auto-flow: column; gap: 1px 14px; align-content: start; }
 .items.col { flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; }
+.items .row { display: flex; gap: 6px; }
 .caption { text-align: center; color: var(--muted); font-size: 11px; padding-top: 3px; white-space: nowrap; }
 .group label { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }

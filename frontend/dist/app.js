@@ -121,8 +121,12 @@
     TMap.render(v, side);
     applyFilters();
     const shots = v.Markers.filter((m) => m.Kind === "shot");
-    // новый скрин — показать этаж, на котором он сделан
-    if (shots.length > shotCount) selectFloor(shots[shots.length - 1].Layer);
+    // новый скрин — показать этаж, на котором он сделан, и при слежении удержать его в кадре
+    if (shots.length > shotCount) {
+      const last = shots[shots.length - 1];
+      selectFloor(last.Layer);
+      if ($("#follow").checked) TMap.keepInView(last.PX, last.PY);
+    }
     shotCount = shots.length;
     $("#center").disabled = shots.length === 0;
     $("#fit").disabled = false;
@@ -141,8 +145,12 @@
 
   $("#center").addEventListener("click", () => {
     const shots = view ? view.Markers.filter((m) => m.Kind === "shot") : [];
-    if (shots.length) TMap.centerOn(shots[shots.length - 1].PX, shots[shots.length - 1].PY);
+    if (!shots.length) return;
+    TMap.centerOn(shots[shots.length - 1].PX, shots[shots.length - 1].PY);
+    $("#follow").checked = true;
   });
+  // сдвинули карту мышью — смотрят в другое место, слежение выключаем
+  TMap.setOnPan(() => ($("#follow").checked = false));
 
   // --- статусная строка ---
   function fmtDate(iso) {

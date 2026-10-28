@@ -185,6 +185,17 @@ window.TMap = (() => {
     draw();
   }
 
+  // keepInView центрирует на точке, только если она вышла из средней части вида (70 %):
+  // при виде на всю карту ничего не прыгает, при приближении карта едет за игроком
+  function keepInView(px, py) {
+    if (!vb) return;
+    const mx = vb.w * 0.15, my = vb.h * 0.15;
+    if (px < vb.x + mx || px > vb.x + vb.w - mx || py < vb.y + my || py > vb.y + vb.h - my) centerOn(px, py);
+  }
+
+  let onPan = null; // вызывается, когда пользователь сам сдвинул карту
+  const setOnPan = (fn) => (onPan = fn);
+
   svg.addEventListener("wheel", (e) => {
     e.preventDefault();
     if (!vb) return;
@@ -203,6 +214,11 @@ window.TMap = (() => {
   });
   addEventListener("mousemove", (e) => {
     if (!drag) return;
+    // щелчок с дрожанием руки — ещё не сдвиг
+    if (!drag.panned && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4) {
+      drag.panned = true;
+      if (onPan) onPan();
+    }
     moved = true;
     const s = vb.w / svg.clientWidth;
     vb = { ...drag.vb, x: drag.vb.x - (e.clientX - drag.x) * s, y: drag.vb.y - (e.clientY - drag.y) * s };
@@ -229,5 +245,5 @@ window.TMap = (() => {
     size = { w, h };
   }).observe(svg);
 
-  return { setSVG, clear, render, setFloor, setFilter, centerOn, fit };
+  return { setSVG, clear, render, setFloor, setFilter, centerOn, keepInView, setOnPan, fit };
 })();

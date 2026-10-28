@@ -14,9 +14,9 @@ window.TMap = (() => {
 
   const base = el("g", {}, svg);
   const overlay = el("g", {}, svg);
-  // порядок — снизу вверх: маршрут поверх выходов
+  // порядок — снизу вверх: путь поверх выходов, текущее место поверх всего
   const groups = {};
-  for (const k of ["transit", "extract_other", "extract_shared", "extract_own", "route"]) groups[k] = el("g", {}, overlay);
+  for (const k of ["transit", "extract_other", "extract_shared", "extract_own", "trail", "position"]) groups[k] = el("g", {}, overlay);
 
   let R = null;          // прямоугольник карты в координатах вида
   let vb = null;         // текущий viewBox
@@ -102,17 +102,18 @@ window.TMap = (() => {
       }
     }
 
+    // последний скрин — «где я сейчас»; линия и прежние точки — «пройденный путь»
     const shots = view.Markers.filter((m) => m.Kind === "shot");
     const red = css("--route");
     if (shots.length > 1) {
       el("polyline", {
         points: shots.map((s) => s.PX + "," + s.PY).join(" "),
         fill: "none", stroke: red, "stroke-width": 0.7 * U, "stroke-dasharray": `${2 * U} ${1.2 * U}`, opacity: 0.8,
-      }, groups.route);
+      }, groups.trail);
     }
     shots.forEach((s, i) => {
       const last = i === shots.length - 1;
-      const g = el("g", { "data-layer": s.Layer }, groups.route);
+      const g = el("g", { "data-layer": s.Layer }, last ? groups.position : groups.trail);
       // конус взгляда: DirX/DirY — единичный вектор в координатах карты
       const ang = Math.atan2(s.DirY, s.DirX), len = 9 * U, half = 0.45;
       if (s.DirX || s.DirY) {
@@ -122,7 +123,11 @@ window.TMap = (() => {
           fill: red, opacity: last ? 0.55 : 0.25,
         }, g);
       }
-      el("circle", { cx: s.PX, cy: s.PY, r: (last ? 2.2 : 1.6) * U, fill: last ? red : "#fff", stroke: red, "stroke-width": 0.6 * U }, g);
+      el("circle", { cx: s.PX, cy: s.PY, r: (last ? 2.4 : 1.6) * U, fill: last ? red : "#fff", stroke: last ? "#fff" : red, "stroke-width": 0.6 * U }, g);
+      if (last) {
+        hover(g, `Я здесь · скрин в ${s.Time}`);
+        return;
+      }
       const t = el("text", { x: s.PX, y: s.PY - 2.6 * U, fill: "#fff", "font-size": 3 * U, "text-anchor": "middle", "paint-order": "stroke", stroke: "#000", "stroke-width": 0.7 * U }, g);
       t.textContent = i + 1;
       hover(g, `#${i + 1} · ${s.Time}`);

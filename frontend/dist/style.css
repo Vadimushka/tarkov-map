@@ -24,6 +24,7 @@ body { display: flex; flex-direction: column; }
 .caption { text-align: center; color: var(--muted); font-size: 11px; padding-top: 3px; white-space: nowrap; }
 .group label { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.sw.trail { border-radius: 0; height: 0; border-top: 2px dashed var(--route); }
 
 .side label { border: 1px solid var(--line); border-radius: 6px; padding: 10px 16px; font-size: 14px; }
 .side input { position: absolute; opacity: 0; pointer-events: none; }

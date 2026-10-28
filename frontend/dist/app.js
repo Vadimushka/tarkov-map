@@ -3,7 +3,7 @@
   const go = () => window.go.main.App;
   const $ = (s) => document.querySelector(s);
 
-  const FILTER_DEFAULTS = { route: true, extract_own: true, extract_shared: true, extract_other: false, transit: true };
+  const FILTER_DEFAULTS = { position: true, trail: false, extract_own: true, extract_shared: true, extract_other: false, transit: true };
   const MODE = { pve: "PvE", regular: "PvP" };
 
   let side = "pmc";
@@ -250,7 +250,9 @@
     try {
       const st = await go().GetSettings();
       side = st.Side === "scav" ? "scav" : "pmc";
-      filters = { ...FILTER_DEFAULTS, ...(st.Filters || {}) };
+      // только известные ключи: устаревшие (например, прежний "route") отбрасываются
+      const saved = st.Filters || {};
+      for (const k in FILTER_DEFAULTS) filters[k] = k in saved ? !!saved[k] : FILTER_DEFAULTS[k];
     } catch (e) {
       console.error(e);
     }

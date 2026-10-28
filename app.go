@@ -19,6 +19,7 @@ import (
 	"github.com/Vadimushka/tarkov-map/internal/paths"
 	"github.com/Vadimushka/tarkov-map/internal/settings"
 	"github.com/Vadimushka/tarkov-map/internal/shots"
+	"github.com/Vadimushka/tarkov-map/internal/winpos"
 )
 
 // Paths — найденные пути для статусной строки и настроек.
@@ -50,6 +51,8 @@ type App struct {
 	tmu     sync.Mutex // tailer и watcher
 	tailer  *gamelog.Tailer
 	watcher *shots.Watcher
+
+	shown sync.Once
 }
 
 // NewApp готовит всё, что нужно методам фронтенда: он может вызвать их
@@ -75,6 +78,28 @@ func (a *App) startup(ctx context.Context) {
 	a.loadData(false)
 	a.startWatching()
 	go a.loop()
+}
+
+// domReady показывает окно (оно стартует скрытым) сразу на сохранённом месте —
+// без прыжка из центра экрана.
+func (a *App) domReady(ctx context.Context) {
+	a.shown.Do(func() {
+		a.mu.Lock()
+		w := a.set.Window
+		a.mu.Unlock()
+		if w != nil {
+			winpos.Apply(*w)
+		}
+		runtime.WindowShow(ctx)
+	})
+}
+
+// beforeClose запоминает положение и размер окна; false — закрытию не мешаем.
+func (a *App) beforeClose(ctx context.Context) bool {
+	if w, ok := winpos.Get(); ok {
+		_ = a.updateSettings(func(s *settings.Settings) { s.Window = &w })
+	}
+	return false
 }
 
 func (a *App) loop() {

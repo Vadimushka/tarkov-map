@@ -71,6 +71,9 @@ func LayerOf(md MapDef, p Vec3) string {
 			if p.Y < e.Height[0] || p.Y >= e.Height[1] {
 				continue
 			}
+			if len(e.Bounds) == 0 {
+				return l.SVGLayer // без прямоугольников этаж действует на всю карту
+			}
 			for _, bb := range e.Bounds {
 				if inside(bb, p.X, p.Z) {
 					return l.SVGLayer

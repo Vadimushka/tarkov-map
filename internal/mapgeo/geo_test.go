@@ -64,6 +64,23 @@ func TestLayerOf(t *testing.T) {
 	}
 }
 
+// У Завода этажи заданы только диапазоном высот — без прямоугольников.
+func TestLayerOfNoBounds(t *testing.T) {
+	f := MapDef{SVGLayer: "Ground_Floor", Layers: []Layer{
+		{SVGLayer: "Second_Floor", Extents: []Extent{{Height: [2]float64{3, 6}}}},
+		{SVGLayer: "Basement", Extents: []Extent{{Height: [2]float64{-10000, -1}}}},
+	}}
+	if got := LayerOf(f, Vec3{10, 4, 10}); got != "Second_Floor" {
+		t.Errorf("y=4 → %q, want Second_Floor", got)
+	}
+	if got := LayerOf(f, Vec3{10, -3, 10}); got != "Basement" {
+		t.Errorf("y=-3 → %q, want Basement", got)
+	}
+	if got := LayerOf(f, Vec3{10, 1, 10}); got != "Ground_Floor" {
+		t.Errorf("y=1 → %q, want Ground_Floor", got)
+	}
+}
+
 func TestForward(t *testing.T) {
 	fx, fz := Forward(0, 0.70711, 0, 0.70711)
 	near(t, "fx", fx, 1, 1e-4)

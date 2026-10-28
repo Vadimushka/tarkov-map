@@ -1,0 +1,148 @@
+[
+  {
+    "normalizedName": "factory",
+    "maps": [
+      {
+        "key": "factory",
+        "projection": "interactive",
+        "transform": [
+          1.629,
+          119.9,
+          1.629,
+          139.3
+        ],
+        "coordinateRotation": 90,
+        "bounds": [
+          [
+            77,
+            -64.5
+          ],
+          [
+            -65.5,
+            67.4
+          ]
+        ],
+        "svgPath": "https://assets.tarkov.dev/maps/svg/Factory.svg",
+        "svgLayer": "Ground_Floor",
+        "layers": [
+          {
+            "name": "2nd Floor",
+            "svgLayer": "Second_Floor",
+            "extents": [
+              {
+                "height": [
+                  3,
+                  6
+                ]
+              }
+            ]
+          },
+          {
+            "name": "3rd Floor",
+            "svgLayer": "Third_Floor",
+            "extents": [
+              {
+                "height": [
+                  6,
+                  10000
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Tunnels",
+            "svgLayer": "Basement",
+            "extents": [
+              {
+                "height": [
+                  -10000,
+                  -1
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "normalizedName": "interchange",
+    "maps": [
+      {
+        "key": "interchange",
+        "projection": "interactive",
+        "transform": [
+          0.265,
+          150.6,
+          0.265,
+          134.6
+        ],
+        "coordinateRotation": 180,
+        "bounds": [
+          [
+            598,
+            -442
+          ],
+          [
+            -433,
+            426
+          ]
+        ],
+        "svgPath": "https://assets.tarkov.dev/maps/svg/Interchange.svg",
+        "svgLayer": "Ground_Level",
+        "layers": [
+          {
+            "name": "2nd Floor",
+            "svgLayer": "First_Floor",
+            "extents": [
+              {
+                "height": [
+                  25,
+                  34
+                ],
+                "bounds": [
+                  [
+                    [
+                      120,
+                      218
+                    ],
+                    [
+                      -222,
+                      -327
+                    ],
+                    "mall"
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "name": "3rd Floor",
+            "svgLayer": "Second_Floor",
+            "extents": [
+              {
+                "height": [
+                  34,
+                  1000
+                ],
+                "bounds": [
+                  [
+                    [
+                      120,
+                      218
+                    ],
+                    [
+                      -222,
+                      -327
+                    ],
+                    "mall"
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

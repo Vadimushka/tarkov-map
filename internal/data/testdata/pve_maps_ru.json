@@ -1,0 +1,10 @@
+{
+  "data": {
+    "5714dbc024597771384a510d Name": "Развязка",
+    "5b0fc42d86f7744a585f9105 Name": "Лаборатория",
+    "ex_interchange_scav_railway": "Выход на железной дороге",
+    "ex_interchange_pmc_saferoom": "Безопасная комната",
+    "ex_interchange_pmc_auto": "А-Выход у ТЭЦ",
+    "tr_interchange_customs_DESC": "Переход на Таможню"
+  }
+}

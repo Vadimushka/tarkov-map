@@ -1,0 +1,68 @@
+{
+  "data": {
+    "maps": {
+      "5714dbc024597771384a510d": {
+        "id": "5714dbc024597771384a510d",
+        "name": "5714dbc024597771384a510d Name",
+        "normalizedName": "interchange",
+        "scenePath": "maps/shopping_mall.bundle",
+        "extracts": [
+          {
+            "name": "ex_interchange_scav_railway",
+            "faction": "scav",
+            "switch": false,
+            "position": {
+              "x": 474.57,
+              "y": 19.92,
+              "z": -433.74
+            },
+            "transferItem": null
+          },
+          {
+            "name": "ex_interchange_pmc_saferoom",
+            "faction": "pmc",
+            "switch": false,
+            "position": {
+              "x": -47.73,
+              "y": 22.97,
+              "z": 44.06
+            },
+            "transferItem": null
+          },
+          {
+            "name": "ex_interchange_pmc_auto",
+            "faction": "pmc",
+            "switch": false,
+            "position": {
+              "x": -302.89,
+              "y": 21.65,
+              "z": -367.73
+            },
+            "transferItem": {
+              "item": "5449016a4bdc2d6f028b456f",
+              "count": 20000
+            }
+          }
+        ],
+        "transits": [
+          {
+            "description": "tr_interchange_customs_DESC",
+            "position": {
+              "x": 280.26,
+              "y": 23.28,
+              "z": 435.08
+            }
+          }
+        ]
+      },
+      "5b0fc42d86f7744a585f9105": {
+        "id": "5b0fc42d86f7744a585f9105",
+        "name": "5b0fc42d86f7744a585f9105 Name",
+        "normalizedName": "the-lab",
+        "scenePath": "maps/laboratory_preset.bundle",
+        "extracts": [],
+        "transits": []
+      }
+    }
+  }
+}

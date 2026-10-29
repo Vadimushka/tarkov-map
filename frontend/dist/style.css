@@ -26,6 +26,7 @@ body { display: flex; flex-direction: column; }
 .group label { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .sw.trail { border-radius: 0; height: 0; border-top: 2px dashed var(--route); }
+.sw.txt { width: auto; height: auto; border-radius: 0; font-size: 10px; line-height: 1; color: var(--muted); }
 
 .side label { border: 1px solid var(--line); border-radius: 6px; padding: 10px 16px; font-size: 14px; }
 .side input { position: absolute; opacity: 0; pointer-events: none; }
@@ -60,3 +61,4 @@ input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid
 /* этажи SVG-карты: выше выбранного скрыты, ниже — приглушены */
 .floor-hidden { display: none; }
 .floor-dim { opacity: .35; }
+#map.no-labels .lbl { display: none; }

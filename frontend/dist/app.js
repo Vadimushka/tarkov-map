@@ -3,7 +3,7 @@
   const go = () => window.go.main.App;
   const $ = (s) => document.querySelector(s);
 
-  const FILTER_DEFAULTS = { position: true, trail: false, extract_own: true, extract_shared: true, extract_other: false, transit: true };
+  const FILTER_DEFAULTS = { position: true, trail: false, extract_own: true, extract_shared: true, extract_other: false, transit: true, labels: true };
   const MODE = { pve: "PvE", regular: "PvP" };
 
   let side = "pmc";
@@ -156,8 +156,6 @@
     TMap.centerOn(shots[shots.length - 1].PX, shots[shots.length - 1].PY);
     $("#follow").checked = true;
   });
-  // сдвинули карту мышью — смотрят в другое место, слежение выключаем
-  TMap.setOnPan(() => ($("#follow").checked = false));
 
   // --- статусная строка ---
   function fmtDate(iso) {

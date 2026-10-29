@@ -13,6 +13,8 @@ const (
 	lMap   = "2026-10-28 21:04:44.152|1.2.5.0.48146|Info|application|scene preset path:maps/shopping_mall.bundle rcid:Shopping_Mall.ScenesPreset.asset"
 	lStart = "2026-10-28 21:06:12.592|1.2.5.0.48146|Info|application|GameStarted:69.1(0) real:89.98(0) diff:20.88"
 	lOther = "2026-10-28 21:04:44.152|1.2.5.0.48146|Debug|application|TRACE-NetworkGameMatching G"
+	// после каждого рейда (выход в меню или убежище) — реальная строка 1.3.0
+	lEnd = "2026-10-29 21:25:01.351|1.3.0.0.48484|Info|application|PrepareSelectedProfileLocally ProfileId:663e0d947821e890db0a8009 AccountId:11408075"
 )
 
 func TestParseLine(t *testing.T) {
@@ -29,6 +31,10 @@ func TestParseLine(t *testing.T) {
 	want := time.Date(2026, 10, 28, 21, 6, 12, 592e6, time.Local)
 	if !ok || e.Kind != EvRaidStart || !e.At.Equal(want) {
 		t.Errorf("lStart → %+v %v", e, ok)
+	}
+	e, ok = ParseLine(lEnd)
+	if !ok || e.Kind != EvRaidEnd || !e.At.Equal(time.Date(2026, 10, 29, 21, 25, 1, 351e6, time.Local)) {
+		t.Errorf("lEnd → %+v %v", e, ok)
 	}
 	for _, l := range []string{lOther, "", "   at Foo()"} {
 		if e, ok := ParseLine(l); ok {

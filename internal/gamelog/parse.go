@@ -1,4 +1,4 @@
-// Package gamelog читает логи EFT: режим, загрузку карты и начало рейда.
+// Package gamelog читает логи EFT: режим, загрузку карты, начало и конец рейда.
 package gamelog
 
 import (
@@ -12,6 +12,7 @@ const (
 	EvMode Kind = iota + 1
 	EvMap
 	EvRaidStart
+	EvRaidEnd // рейд окончен: выход в меню или убежище
 )
 
 // Event — значимая строка лога.
@@ -54,6 +55,10 @@ func ParseLine(line string) (Event, bool) {
 	}
 	if strings.Contains(line, "|GameStarted:") {
 		return Event{Kind: EvRaidStart, At: at}, true
+	}
+	// пишется при каждом возврате в меню (и при входе в игру — до первой карты)
+	if strings.Contains(line, "PrepareSelectedProfileLocally") {
+		return Event{Kind: EvRaidEnd, At: at}, true
 	}
 	return Event{}, false
 }

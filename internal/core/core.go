@@ -57,8 +57,15 @@ type Core struct {
 	def       mapgeo.MapDef
 	supported bool
 	raidStart time.Time
+	raidEnd   time.Time // после него скрины — из убежища или меню
 	route     []shots.Shot
 	keys      map[string]bool
+	held      []heldShot // скрины, пришедшие раньше прочитанной строки GameStarted
+}
+
+type heldShot struct {
+	s  shots.Shot
+	at time.Time
 }
 
 func New(src MapSource) *Core {
@@ -74,9 +81,18 @@ func (c *Core) OnLogEvent(e gamelog.Event) {
 	case gamelog.EvMap:
 		c.scene = e.Bundle
 		c.resolve()
-		c.route, c.keys, c.raidStart = nil, map[string]bool{}, time.Time{}
+		c.route, c.keys, c.held = nil, map[string]bool{}, nil
+		c.raidStart, c.raidEnd = time.Time{}, time.Time{}
 	case gamelog.EvRaidStart:
-		c.raidStart = e.At
+		c.raidStart, c.raidEnd = e.At, time.Time{}
+		for _, h := range c.held {
+			c.add(h.s, h.at)
+		}
+		c.held = nil
+	case gamelog.EvRaidEnd:
+		if !c.raidStart.IsZero() { // при входе в игру строка бывает и до первой карты
+			c.raidEnd = e.At
+		}
 	}
 }
 
@@ -88,7 +104,21 @@ func (c *Core) OnShot(name string, at time.Time) bool {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.supported || c.raidStart.IsZero() || at.Before(c.raidStart) || c.keys[s.Key()] {
+	if !c.supported {
+		return false
+	}
+	if c.raidStart.IsZero() {
+		// карта загружена, а строка о старте ещё не прочитана: лог читается раз в секунду,
+		// а первый скрин делают через пару секунд после спавна
+		c.held = append(c.held, heldShot{s, at})
+		return false
+	}
+	return c.add(s, at)
+}
+
+// add принимает скрин, сделанный в текущем рейде.
+func (c *Core) add(s shots.Shot, at time.Time) bool {
+	if at.Before(c.raidStart) || (!c.raidEnd.IsZero() && !at.Before(c.raidEnd)) || c.keys[s.Key()] {
 		return false
 	}
 	c.keys[s.Key()] = true

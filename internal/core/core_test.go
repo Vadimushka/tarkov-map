@@ -172,3 +172,52 @@ func TestRestoreMidRaid(t *testing.T) {
 		t.Errorf("маршрут = %+v", sm)
 	}
 }
+
+// Скрин из убежища или меню после рейда (в имени есть координаты) не попадает на прошлую карту.
+func TestShotAfterRaidEndIgnored(t *testing.T) {
+	c := inRaid()
+	c.OnShot(shot1, at(21, 6, 30))
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvRaidEnd, At: at(21, 25, 1)})
+	hideout := "2026-10-28[21-33]_2.08, 41.65, 0.48_0.05183, -0.64508, 0.04393, 0.76109_6.76 (0).png"
+	if c.OnShot(hideout, at(21, 33, 8)) {
+		t.Error("скрин из убежища принят")
+	}
+	if sm := shotMarkers(c.View()); len(sm) != 1 || sm[0].Time != "21:06" {
+		t.Errorf("после конца рейда маршрут = %+v, want прежний", sm)
+	}
+}
+
+// Перезапуск приложения после рейда: реплей логов уже видит конец рейда,
+// но скрины самого рейда (по времени файла) должны восстановиться.
+func TestRestoreAfterRaidEnd(t *testing.T) {
+	c := inRaid()
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvRaidEnd, At: at(21, 25, 1)})
+	c.OnShot(shot1, at(21, 6, 30))
+	if n := len(shotMarkers(c.View())); n != 1 {
+		t.Errorf("скринов рейда после реплея %d, want 1", n)
+	}
+}
+
+// Первый скрин через пару секунд после спавна приходит раньше, чем прочитана строка
+// GameStarted (лог читается раз в секунду): его надо придержать, а не выбросить.
+func TestEarlyShotHeldUntilRaidStart(t *testing.T) {
+	c := New(fakeSrc{})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, At: at(21, 4, 44), Bundle: "maps/shopping_mall.bundle"})
+	c.OnShot(shot1, at(21, 6, 15)) // файл появился, строка о старте ещё не прочитана
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvRaidStart, At: at(21, 6, 12)})
+	if sm := shotMarkers(c.View()); len(sm) != 1 || sm[0].Time != "21:06" {
+		t.Errorf("ранний скрин потерян: %+v", sm)
+	}
+}
+
+// Придержанные скрины не переживают смену карты.
+func TestHeldShotsDroppedOnNewMap(t *testing.T) {
+	c := New(fakeSrc{})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, At: at(21, 4, 44), Bundle: "maps/shopping_mall.bundle"})
+	c.OnShot(shot1, at(21, 6, 15))
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, At: at(21, 30, 0), Bundle: "maps/shopping_mall.bundle"})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvRaidStart, At: at(21, 6, 12)})
+	if n := len(shotMarkers(c.View())); n != 0 {
+		t.Errorf("скрин прошлой загрузки карты попал в маршрут: %d", n)
+	}
+}

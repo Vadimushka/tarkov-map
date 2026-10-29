@@ -1,4 +1,5 @@
 // Отрисовка карты: SVG-подложка, маркеры по готовым координатам (PX/PY), этажи, масштаб и сдвиг.
+// Значки и подписи рисуются в пикселях экрана: при любом масштабе они одного размера.
 window.TMap = (() => {
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.getElementById("map");
@@ -24,6 +25,8 @@ window.TMap = (() => {
   let baseLayer = "", floor = "";
   let layerIds = new Set(); // этажи кроме базового
   let markers = [];      // выходы и переходы последней отрисовки — для вписывания
+  let pins = [];         // группы меток в пикселях экрана: {g, x, y}
+  let upp = 1;           // единиц карты на пиксель экрана
 
   const FACTION = { pmc: "ЧВК", scav: "Дикие", shared: "Совместный" };
 
@@ -35,6 +38,15 @@ window.TMap = (() => {
       tip.style.top = ev.clientY + 12 + "px";
     });
     node.addEventListener("mouseleave", () => (tip.style.display = "none"));
+  }
+
+  // pin — группа в точке карты, её содержимое задаётся в пикселях экрана
+  const place = (p) => p.g.setAttribute("transform", `translate(${p.x},${p.y}) scale(${upp})`);
+  function pin(parent, x, y, layer) {
+    const p = { g: el("g", { "data-layer": layer }, parent), x, y };
+    pins.push(p);
+    place(p);
+    return p.g;
   }
 
   function setSVG(text, rect, layers) {
@@ -66,6 +78,7 @@ window.TMap = (() => {
     R = null;
     vb = null;
     markers = [];
+    pins = [];
     floorGroups = [];
   }
 
@@ -74,32 +87,54 @@ window.TMap = (() => {
     return m.Faction === side ? "extract_own" : "extract_other";
   }
 
-  function label(parent, x, y, text, color, U) {
-    const t = el("text", { x, y, fill: color, "font-size": 3.6 * U, "paint-order": "stroke", stroke: "#000", "stroke-width": 0.8 * U }, parent);
+  // подпись справа от значка на тёмной плашке — читается поверх любой подложки;
+  // класс lbl — для флажка «Подписи»
+  function label(g, text, color) {
+    const lg = el("g", { class: "lbl" }, g);
+    const plate = el("rect", { x: 10, y: -9.5, height: 19, rx: 4, fill: "rgba(12,11,9,.8)" }, lg);
+    const t = el("text", { x: 15, y: 4.5, fill: color, "font-size": 12.5, "font-weight": 500 }, lg);
     t.textContent = text;
+    let w = 0;
+    try { w = t.getComputedTextLength(); } catch (e) { /* без раскладки — оценим по длине */ }
+    plate.setAttribute("width", (w || text.length * 7) + 10);
   }
 
   function render(view, side) {
+    // ширину подписей можно измерить только у видимого текста: скрытые фильтром
+    // группы и подписи на время отрисовки показываются
+    const shown = {}, noLabels = svg.classList.contains("no-labels");
+    for (const k in groups) {
+      shown[k] = groups[k].style.display;
+      groups[k].style.display = "";
+    }
+    svg.classList.remove("no-labels");
+    drawMarkers(view, side);
+    for (const k in groups) groups[k].style.display = shown[k];
+    svg.classList.toggle("no-labels", noLabels);
+  }
+
+  function drawMarkers(view, side) {
     for (const k in groups) groups[k].replaceChildren();
+    pins = [];
+    tip.style.display = "none"; // элемент под курсором пересоздан — mouseleave уже не придёт
     if (!R) return;
-    const U = R.w / 300; // базовая единица размера маркеров
     markers = view.Markers.filter((m) => m.Kind !== "shot");
 
     for (const m of view.Markers) {
       if (m.Kind === "extract") {
         const color = css("--" + m.Faction) || css("--shared");
-        const g = el("g", { "data-layer": m.Layer }, groups[extractGroup(m, side)]);
-        el("rect", { x: m.PX - 2.2 * U, y: m.PY - 2.2 * U, width: 4.4 * U, height: 4.4 * U, rx: U, fill: color, stroke: "#000", "stroke-width": 0.4 * U }, g);
-        label(g, m.PX + 3 * U, m.PY + 1.3 * U, m.Name + (m.Paid ? " ₽" : "") + (m.Switch ? " ⚡" : ""), color, U);
+        const g = pin(groups[extractGroup(m, side)], m.PX, m.PY, m.Layer);
+        el("rect", { x: -6, y: -6, width: 12, height: 12, rx: 2.5, fill: color, stroke: "#fff", "stroke-width": 1.5 }, g);
+        label(g, m.Name + (m.Paid ? " ₽" : "") + (m.Switch ? " ⚡" : ""), color);
         const cond = [];
         if (m.Paid) cond.push("платный: нужны деньги или предмет");
         if (m.Switch) cond.push("сначала включить рубильник");
         hover(g, [m.Name, FACTION[m.Faction] || m.Faction, ...cond].join(" · "));
       } else if (m.Kind === "transit") {
         const color = css("--transit");
-        const g = el("g", { "data-layer": m.Layer }, groups.transit);
-        el("circle", { cx: m.PX, cy: m.PY, r: 2.4 * U, fill: color, stroke: "#000", "stroke-width": 0.4 * U }, g);
-        label(g, m.PX + 3 * U, m.PY + 1.3 * U, m.Name, color, U);
+        const g = pin(groups.transit, m.PX, m.PY, m.Layer);
+        el("circle", { r: 6.5, fill: color, stroke: "#fff", "stroke-width": 1.5 }, g);
+        label(g, m.Name, color);
         hover(g, m.Name + " · переход на другую карту");
       }
     }
@@ -110,27 +145,28 @@ window.TMap = (() => {
     if (shots.length > 1) {
       el("polyline", {
         points: shots.map((s) => s.PX + "," + s.PY).join(" "),
-        fill: "none", stroke: red, "stroke-width": 0.7 * U, "stroke-dasharray": `${2 * U} ${1.2 * U}`, opacity: 0.8,
+        fill: "none", stroke: red, "stroke-width": 2.5, "stroke-dasharray": "7 5", opacity: 0.8,
+        "vector-effect": "non-scaling-stroke",
       }, groups.trail);
     }
     shots.forEach((s, i) => {
       const last = i === shots.length - 1;
-      const g = el("g", { "data-layer": s.Layer }, last ? groups.position : groups.trail);
+      const g = pin(last ? groups.position : groups.trail, s.PX, s.PY, s.Layer);
       // конус взгляда: DirX/DirY — единичный вектор в координатах карты
-      const ang = Math.atan2(s.DirY, s.DirX), len = 9 * U, half = 0.45;
+      const ang = Math.atan2(s.DirY, s.DirX), len = last ? 46 : 30, half = 0.45;
       if (s.DirX || s.DirY) {
         el("path", {
-          d: `M${s.PX},${s.PY} L${s.PX + len * Math.cos(ang - half)},${s.PY + len * Math.sin(ang - half)} ` +
-             `A${len},${len} 0 0 1 ${s.PX + len * Math.cos(ang + half)},${s.PY + len * Math.sin(ang + half)} Z`,
+          d: `M0,0 L${len * Math.cos(ang - half)},${len * Math.sin(ang - half)} ` +
+             `A${len},${len} 0 0 1 ${len * Math.cos(ang + half)},${len * Math.sin(ang + half)} Z`,
           fill: red, opacity: last ? 0.55 : 0.25,
         }, g);
       }
-      el("circle", { cx: s.PX, cy: s.PY, r: (last ? 2.4 : 1.6) * U, fill: last ? red : "#fff", stroke: last ? "#fff" : red, "stroke-width": 0.6 * U }, g);
+      el("circle", { r: last ? 7 : 4.5, fill: last ? red : "#fff", stroke: last ? "#fff" : red, "stroke-width": 2 }, g);
       if (last) {
         hover(g, `Я здесь · скрин в ${s.Time}`);
         return;
       }
-      const t = el("text", { x: s.PX, y: s.PY - 2.6 * U, fill: "#fff", "font-size": 3 * U, "text-anchor": "middle", "paint-order": "stroke", stroke: "#000", "stroke-width": 0.7 * U }, g);
+      const t = el("text", { y: -9, fill: "#fff", "font-size": 11, "text-anchor": "middle", "paint-order": "stroke", stroke: "#000", "stroke-width": 3 }, g);
       t.textContent = i + 1;
       hover(g, `#${i + 1} · ${s.Time}`);
     });
@@ -159,28 +195,68 @@ window.TMap = (() => {
   }
 
   function setFilter(key, on) {
-    if (groups[key]) groups[key].style.display = on ? "" : "none";
+    if (key === "labels") svg.classList.toggle("no-labels", !on);
+    else if (groups[key]) groups[key].style.display = on ? "" : "none";
   }
 
   // --- масштаб и сдвиг через viewBox ---
-  let moved = false; // пользователь двигал карту — не вписывать её заново при смене размера
-  const draw = () => vb && svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  const MAX_ZOOM = 8; // во сколько раз можно приблизить относительно всей карты
+  let moved = false;  // пользователь двигал карту — не вписывать её заново при смене размера
+  const sized = () => R && svg.clientWidth && svg.clientHeight;
 
-  // вписать карту целиком вместе с метками за её краем (переходы и выходы бывают снаружи)
-  function fit() {
-    moved = false;
-    if (!R || !svg.clientWidth || !svg.clientHeight) return;
+  function draw() {
+    if (!vb) return;
+    vb = clampView(vb);
+    svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+    const u = svg.clientWidth ? vb.w / svg.clientWidth : 0;
+    if (u && u !== upp) {
+      upp = u;
+      pins.forEach(place);
+    }
+  }
+
+  // карта вместе с метками за её краем (переходы и выходы бывают снаружи) и полями 3 %
+  function contentBox() {
     let x0 = R.x, y0 = R.y, x1 = R.x + R.w, y1 = R.y + R.h;
     for (const m of markers) {
       x0 = Math.min(x0, m.PX); y0 = Math.min(y0, m.PY);
       x1 = Math.max(x1, m.PX); y1 = Math.max(y1, m.PY);
     }
     const pad = 0.03 * Math.max(x1 - x0, y1 - y0);
-    x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
-    const w = x1 - x0, h = y1 - y0, ar = svg.clientWidth / svg.clientHeight;
-    vb = w / h > ar
-      ? { x: x0, w, h: w / ar, y: y0 - (w / ar - h) / 2 }
-      : { y: y0, h, w: h * ar, x: x0 - (h * ar - w) / 2 };
+    return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+  }
+
+  // вид на всю карту при текущих пропорциях окна
+  function fullView() {
+    const b = contentBox(), w = b.x1 - b.x0, h = b.y1 - b.y0, ar = svg.clientWidth / svg.clientHeight;
+    return w / h > ar
+      ? { x: b.x0, w, h: w / ar, y: b.y0 - (w / ar - h) / 2 }
+      : { y: b.y0, h, w: h * ar, x: b.x0 - (h * ar - w) / 2 };
+  }
+
+  // Отдалить — не дальше всей карты, приблизить — не больше MAX_ZOOM раз. Сдвиг: карта
+  // меньше вида остаётся в нём целиком, больше вида — вид не выходит за её край.
+  function clampView(v) {
+    if (!sized()) return v;
+    const full = fullView(), b = contentBox();
+    let { x, y, w, h } = v;
+    const nw = Math.min(full.w, Math.max(full.w / MAX_ZOOM, w));
+    if (nw !== w) {
+      const cx = x + w / 2, cy = y + h / 2;
+      h = (h * nw) / w;
+      w = nw;
+      x = cx - w / 2;
+      y = cy - h / 2;
+    }
+    const fix = (p, size, lo, hi) =>
+      size >= hi - lo ? Math.min(lo, Math.max(hi - size, p)) : Math.min(hi - size, Math.max(lo, p));
+    return { x: fix(x, w, b.x0, b.x1), y: fix(y, h, b.y0, b.y1), w, h };
+  }
+
+  function fit() {
+    moved = false;
+    if (!sized()) return;
+    vb = fullView();
     draw();
   }
 
@@ -192,21 +268,21 @@ window.TMap = (() => {
   }
 
   // keepInView центрирует на точке, только если она вышла из средней части вида (70 %):
-  // при виде на всю карту ничего не прыгает, при приближении карта едет за игроком
+  // при приближении карта едет за игроком, а вид на всю карту не сдвигается — видно и так
   function keepInView(px, py) {
-    if (!vb) return;
+    if (!vb || !sized() || vb.w >= fullView().w * 0.999) return;
     const mx = vb.w * 0.15, my = vb.h * 0.15;
     if (px < vb.x + mx || px > vb.x + vb.w - mx || py < vb.y + my || py > vb.y + vb.h - my) centerOn(px, py);
   }
 
-  let onPan = null; // вызывается, когда пользователь сам сдвинул карту
-  const setOnPan = (fn) => (onPan = fn);
-
   svg.addEventListener("wheel", (e) => {
     e.preventDefault();
-    if (!vb) return;
+    if (!vb || !sized()) return;
+    // множитель сразу в пределах масштаба, чтобы точка под курсором осталась на месте
+    const full = fullView(), w = Math.min(full.w, Math.max(full.w / MAX_ZOOM, vb.w * (e.deltaY > 0 ? 1.2 : 1 / 1.2)));
+    const k = w / vb.w;
+    if (k === 1) return;
     moved = true;
-    const k = e.deltaY > 0 ? 1.2 : 1 / 1.2;
     const mx = vb.x + (vb.w * e.offsetX) / svg.clientWidth, my = vb.y + (vb.h * e.offsetY) / svg.clientHeight;
     vb = { x: mx - (mx - vb.x) * k, y: my - (my - vb.y) * k, w: vb.w * k, h: vb.h * k };
     draw();
@@ -220,11 +296,6 @@ window.TMap = (() => {
   });
   addEventListener("mousemove", (e) => {
     if (!drag) return;
-    // щелчок с дрожанием руки — ещё не сдвиг
-    if (!drag.panned && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4) {
-      drag.panned = true;
-      if (onPan) onPan();
-    }
     moved = true;
     const s = vb.w / svg.clientWidth;
     vb = { ...drag.vb, x: drag.vb.x - (e.clientX - drag.x) * s, y: drag.vb.y - (e.clientY - drag.y) * s };
@@ -251,5 +322,5 @@ window.TMap = (() => {
     size = { w, h };
   }).observe(svg);
 
-  return { setSVG, clear, render, setFloor, setFilter, centerOn, keepInView, setOnPan, fit };
+  return { setSVG, clear, render, setFloor, setFilter, centerOn, keepInView, fit };
 })();

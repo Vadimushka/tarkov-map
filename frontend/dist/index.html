@@ -30,6 +30,7 @@
         <label><input type="checkbox" data-f="extract_own"><span class="sw" data-own></span>Мои выходы</label>
         <label><input type="checkbox" data-f="extract_shared"><span class="sw" style="background:var(--shared)"></span>Совместные выходы</label>
         <label><input type="checkbox" data-f="extract_other"><span class="sw" data-other></span>Выходы другой стороны</label>
+        <label title="Выключите — останутся значки, название покажется при наведении"><input type="checkbox" data-f="labels"><span class="sw txt">Аа</span>Подписи</label>
       </div>
       <div class="caption">Показывать</div>
     </section>
@@ -39,7 +40,7 @@
     </section>
     <section class="group">
       <div class="items col">
-        <label title="Новый скрин всегда в кадре. Сдвинете карту мышью — выключится; «Центр на мне» включит снова."><input type="checkbox" id="follow" checked>Следовать за мной</label>
+        <label title="Новый скрин всегда в кадре, даже если карту сдвинули или приблизили. Чтобы спокойно рассматривать карту, снимите флажок."><input type="checkbox" id="follow" checked>Следовать за мной</label>
         <div class="row">
           <button id="center" disabled>Центр на мне</button>
           <button id="fit" disabled>Вся карта</button>

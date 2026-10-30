@@ -43,7 +43,7 @@ body { display: flex; flex-direction: column; }
 .items.col.loot { gap: 2px; }
 .loot .row { align-items: center; }
 #loot-found { font-size: 11px; min-height: 15px; }
-#loot-q { width: 130px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
+#loot-q { width: 145px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
 #loot-q:disabled { opacity: .6; }
 #loot-clear { padding: 2px 8px; }
 

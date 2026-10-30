@@ -37,6 +37,13 @@ type GameMap struct {
 	ID, NormalizedName, Name, ScenePath string
 	Extracts                            []Extract
 	Transits                            []Transit
+	Containers                          []Container
+	Loose                               []Loose
+	Locks                               []Lock
+	Switches                            []Switch
+	Hazards                             []Hazard
+	Weapons                             []Weapon
+	Bosses                              []Boss
 }
 
 // Варианты карт, у которых своей SVG нет.
@@ -357,6 +364,7 @@ type rawMap struct {
 		Description string      `json:"description"`
 		Position    mapgeo.Vec3 `json:"position"`
 	} `json:"transits"`
+	rawContent
 }
 
 func parseMaps(mapsFile, ruFile string) (map[string]GameMap, error) {
@@ -367,6 +375,7 @@ func parseMaps(mapsFile, ruFile string) (map[string]GameMap, error) {
 	var raw struct {
 		Data struct {
 			Maps map[string]rawMap `json:"maps"`
+			rawRefs
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
@@ -383,6 +392,7 @@ func parseMaps(mapsFile, ruFile string) (map[string]GameMap, error) {
 		for _, t := range m.Transits {
 			gm.Transits = append(gm.Transits, Transit{Name: tr(t.Description), Pos: t.Position})
 		}
+		fillContent(&gm, m.rawContent, raw.Data.rawRefs, tr)
 		out[m.ScenePath] = gm
 	}
 	return out, nil

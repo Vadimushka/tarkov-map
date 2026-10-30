@@ -53,6 +53,140 @@
               "z": 435.08
             }
           }
+        ],
+        "lootContainers": [
+          {
+            "lootContainer": "c_weapon",
+            "position": {
+              "x": 10,
+              "y": 1,
+              "z": 20
+            }
+          },
+          {
+            "lootContainer": "c_new",
+            "position": {
+              "x": 11,
+              "y": 1,
+              "z": 21
+            }
+          }
+        ],
+        "lootLoose": [
+          {
+            "position": {
+              "x": 1,
+              "y": 30,
+              "z": 2
+            },
+            "items": [
+              "i_flash",
+              "i_led"
+            ]
+          }
+        ],
+        "locks": [
+          {
+            "lockType": "door",
+            "key": "i_key",
+            "needsPower": true,
+            "position": {
+              "x": 3,
+              "y": 1,
+              "z": 4
+            }
+          }
+        ],
+        "switches": [
+          {
+            "name": "switch_mall",
+            "position": {
+              "x": 5,
+              "y": 1,
+              "z": 6
+            }
+          }
+        ],
+        "hazards": [
+          {
+            "hazardType": "minefield",
+            "name": "DamageType_Landmine",
+            "position": {
+              "x": 7,
+              "y": 1,
+              "z": 8
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 1,
+                "z": 0
+              },
+              {
+                "x": 10,
+                "y": 1,
+                "z": 0
+              },
+              {
+                "x": 10,
+                "y": 1,
+                "z": 10
+              }
+            ]
+          }
+        ],
+        "stationaryWeapons": [
+          {
+            "stationaryWeapon": "w_utes",
+            "position": {
+              "x": 9,
+              "y": 1,
+              "z": 9
+            }
+          }
+        ],
+        "bosses": [
+          {
+            "mob": "bossKilla",
+            "spawnChance": 0.75,
+            "spawnLocations": [
+              {
+                "chance": 0.33,
+                "positions": [
+                  {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                  },
+                  {
+                    "x": 2,
+                    "y": 1,
+                    "z": 2
+                  }
+                ]
+              },
+              {
+                "chance": 0.5,
+                "positions": []
+              }
+            ]
+          },
+          {
+            "mob": "pmcBEAR",
+            "spawnChance": 1,
+            "spawnLocations": [
+              {
+                "chance": 1,
+                "positions": [
+                  {
+                    "x": 3,
+                    "y": 1,
+                    "z": 3
+                  }
+                ]
+              }
+            ]
+          }
         ]
       },
       "5b0fc42d86f7744a585f9105": {
@@ -62,6 +196,34 @@
         "scenePath": "maps/laboratory_preset.bundle",
         "extracts": [],
         "transits": []
+      }
+    },
+    "lootContainers": {
+      "c_weapon": {
+        "id": "c_weapon",
+        "name": "c_weapon Name",
+        "normalizedName": "weapon-box"
+      },
+      "c_new": {
+        "id": "c_new",
+        "name": "c_new Name",
+        "normalizedName": "mystery-crate"
+      }
+    },
+    "stationaryWeapons": {
+      "w_utes": {
+        "id": "w_utes",
+        "name": "w_utes Name"
+      }
+    },
+    "mobs": {
+      "bossKilla": {
+        "id": "bossKilla",
+        "name": "bossKilla"
+      },
+      "pmcBEAR": {
+        "id": "pmcBEAR",
+        "name": "pmcBEAR"
       }
     }
   }

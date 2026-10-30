@@ -3,7 +3,7 @@ package data
 import "testing"
 
 func TestLabels(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	ls := s.Labels("interchange")
 	if len(ls) != 3 {
 		t.Fatalf("Labels = %+v", ls)

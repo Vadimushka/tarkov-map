@@ -165,3 +165,44 @@ func TestWatcherFirstShotInNewDir(t *testing.T) {
 		t.Fatal("первый скрин в новой папке потерян")
 	}
 }
+
+// Папку скриншотов удалили и создали заново (чистка, переустановка игры): слежение
+// возобновляется без перезапуска программы.
+func TestWatcherDirRecreated(t *testing.T) {
+	old := retryEvery
+	retryEvery = 20 * time.Millisecond
+	t.Cleanup(func() { retryEvery = old })
+	dir := filepath.Join(t.TempDir(), "Screenshots")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan string, 10)
+	w, err := NewWatcher(dir, func(name string, at time.Time) { got <- name })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	// Windows держит удалённую папку, пока слежение не отпустит её
+	deadline := time.Now().Add(3 * time.Second)
+	for err := os.Mkdir(dir, 0o755); err != nil; err = os.Mkdir(dir, 0o755) {
+		if time.Now().After(deadline) {
+			t.Fatalf("папку не создать заново: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for i := 0; ; i++ {
+		name := fmt.Sprintf("2026-10-30[22-00]_%d.png", i)
+		os.WriteFile(filepath.Join(dir, name), nil, 0o644)
+		select {
+		case <-got:
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("скрин в пересозданной папке не замечен")
+		}
+	}
+}

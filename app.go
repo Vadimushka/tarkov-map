@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -39,7 +39,6 @@ type App struct {
 	flagGame, flagShots string
 	cfgDir              string
 	store               *data.Store
-	sync                *data.Syncer
 	core                *core.Core
 
 	mu                sync.Mutex
@@ -68,27 +67,22 @@ func NewApp(flagGame, flagShots string) *App {
 		base = os.TempDir()
 	}
 	cfgDir := filepath.Join(base, "TarkovMap")
-	store := data.NewStore(cfgDir, &http.Client{Timeout: 30 * time.Second}, time.Now)
+	var snap fs.FS // nil — снимок не открылся: в статусе будет «нет данных»
 	if zr, err := zip.NewReader(bytes.NewReader(seedZip), int64(len(seedZip))); err == nil {
-		store.Seed = zr
+		snap = zr
 	} else {
-		log.Printf("снимок данных не открылся, работаем без него: %v", err) // целость проверяет TestSeedZipComplete
+		log.Printf("снимок данных не открылся: %v", err) // целость проверяет TestSeedZipComplete
 	}
+	store := data.NewStore(snap)
 	a := &App{
 		flagGame: flagGame, flagShots: flagShots, cfgDir: cfgDir,
 		store: store, core: core.New(store),
 		set: settings.Load(cfgDir), mode: "pve", loading: true,
 	}
-	// фоновое обновление данных: метки пересчитываются по свежим данным
-	a.sync = data.NewSyncer(store, func() {
-		a.core.SetSource(a.store)
-		a.markDirty()
-	})
 	return a
 }
 
-// startup: данные из кэша (сеть — в фоне или, без кэша, сразу), затем реплей
-// текущей сессии логов и скринов и слежение.
+// startup: данные из снимка, затем реплей текущей сессии логов и скринов и слежение.
 func (a *App) startup(ctx context.Context) {
 	a.mu.Lock()
 	a.ctx = ctx
@@ -157,16 +151,16 @@ func (a *App) markDirty() {
 	a.mu.Unlock()
 }
 
-// useData делает текущими данные режима (см. data.Syncer) и обновляет сообщение об ошибке.
+// useData делает текущими данные режима и обновляет сообщение об ошибке.
 func (a *App) useData(mode string) {
-	a.setDataErr(a.sync.Use(mode))
+	a.setDataErr(a.store.Load(mode))
 	a.core.SetSource(a.store)
 }
 
 func (a *App) setDataErr(err error) {
 	msg := ""
 	if errors.Is(err, data.ErrNoData) {
-		msg = "Нет данных карт: нет сети и нет кэша. Подключитесь к интернету и нажмите «Обновить данные»."
+		msg = "Нет данных карт: программа собрана без них, нужна новая сборка."
 	} else if err != nil {
 		msg = "Ошибка данных карт: " + err.Error()
 	}
@@ -346,30 +340,6 @@ func (a *App) SetPaths(gameDir, shotsDir string) error {
 	a.startWatching()
 	a.flush()
 	return nil
-}
-
-// RefreshData — кнопка «Обновить данные»: данные режима и SVG текущей карты из сети
-// сейчас; без сети всё остаётся на кэше, а ошибка уходит в ответ.
-func (a *App) RefreshData() error {
-	a.mu.Lock()
-	mode := a.mode
-	a.mu.Unlock()
-	err := a.sync.Refresh(mode)
-	switch {
-	case err == nil:
-		a.setDataErr(nil)
-	case a.sync.Mode() != mode: // данных режима нет совсем — это в статус
-		a.setDataErr(data.ErrNoData)
-	}
-	a.core.SetSource(a.store)
-	if id := a.core.Snapshot().MapID; err == nil && id != "" {
-		if def, ok := a.store.MapDef(id); ok {
-			err = a.store.RefreshSVG(def)
-		}
-	}
-	a.markDirty()
-	a.flush()
-	return err
 }
 
 func (a *App) GetPaths() Paths {

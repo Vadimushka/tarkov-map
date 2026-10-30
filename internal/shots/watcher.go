@@ -19,11 +19,12 @@ type Watcher struct {
 	done chan struct{}
 }
 
-// retryEvery — как часто проверять, не появилась ли папка: игра создаёт Screenshots
-// только при первом скрине.
+// retryEvery — как часто проверять, есть ли папка: игра создаёт Screenshots только
+// при первом скрине, а игрок может её удалить и создать заново.
 var retryEvery = 2 * time.Second
 
-// NewWatcher следит за dir; если папки ещё нет, начнёт следить, когда она появится.
+// NewWatcher следит за dir; если папки нет (ещё нет или её удалили), начнёт следить,
+// когда она появится.
 func NewWatcher(dir string, onShot func(name string, at time.Time)) (*Watcher, error) {
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -40,17 +41,18 @@ func NewWatcher(dir string, onShot func(name string, at time.Time)) (*Watcher, e
 	}
 	go func() {
 		defer close(w.done)
-		var retry <-chan time.Time
-		if waiting {
-			t := time.NewTicker(retryEvery)
-			defer t.Stop()
-			retry = t.C
-		}
+		t := time.NewTicker(retryEvery)
+		defer t.Stop()
 		for {
 			select {
-			case <-retry:
-				if fw.Add(dir) == nil {
-					retry = nil
+			case <-t.C:
+				_, err := os.Stat(dir)
+				switch {
+				case err != nil && !waiting: // папку удалили, а событие не пришло
+					_ = fw.Remove(dir)
+					waiting = true
+				case err == nil && waiting && fw.Add(dir) == nil:
+					waiting = false
 					// игра создаёт папку вместе с первым скрином — Create для него уже не придёт
 					reportExisting(dir, onShot)
 				}
@@ -60,6 +62,11 @@ func NewWatcher(dir string, onShot func(name string, at time.Time)) (*Watcher, e
 				}
 				if ev.Has(fsnotify.Create) && strings.EqualFold(filepath.Ext(ev.Name), ".png") {
 					onShot(filepath.Base(ev.Name), time.Now())
+				}
+				// удалили или переименовали саму папку: слежение за ней пропало — ждём новую
+				if ev.Has(fsnotify.Remove|fsnotify.Rename) && samePath(ev.Name, dir) {
+					_ = fw.Remove(dir)
+					waiting = true
 				}
 			case _, ok := <-fw.Errors:
 				if !ok {
@@ -91,4 +98,9 @@ func reportExisting(dir string, onShot func(name string, at time.Time)) {
 			onShot(e.Name(), info.ModTime())
 		}
 	}
+}
+
+// samePath — пути указывают на одну папку (регистр в Windows не важен).
+func samePath(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }

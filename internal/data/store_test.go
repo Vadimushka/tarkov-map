@@ -2,132 +2,49 @@ package data
 
 import (
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path"
-	"path/filepath"
-	"sync"
-	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
+
+	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
 )
 
-type fakeServer struct {
-	*httptest.Server
-	hits     atomic.Int32
-	svgMain  bool // отдавать ли SVG по основному адресу
-	noItems  bool // 404 на items_ru
-	fallback string
-	fail     atomic.Bool   // отвечать 500 на всё
-	hang     chan struct{} // не nil — запросы висят, пока канал не закрыт
-}
+// snapshotAt — время файлов в тестовом снимке.
+var snapshotAt = time.Date(2026, 10, 30, 21, 32, 0, 0, time.Local)
 
-func newServer(t *testing.T) *fakeServer {
+// snapshot — снимок из testdata с путями, как их кладёт scripts/seed.
+func snapshot(t *testing.T) fstest.MapFS {
 	t.Helper()
-	fs := &fakeServer{svgMain: true, hang: make(chan struct{})}
-	close(fs.hang) // по умолчанию не висим; hangUntilCleanup включает
-	files := map[string]string{
-		"/pve/maps":            "testdata/pve_maps.json",
-		"/pve/maps_ru":         "testdata/pve_maps_ru.json",
-		"/pve/items_ru":        "testdata/pve_items_ru.json",
-		"/maps.json":           "testdata/maps.json",
-		"/svg/Interchange.svg": "testdata/Interchange.svg",
-		"/fb/Interchange.svg":  "testdata/Interchange.svg",
+	m := fstest.MapFS{}
+	for name, src := range map[string]string{
+		"maps.json":           "testdata/maps.json",
+		"pve_maps.json":       "testdata/pve_maps.json",
+		"pve_maps_ru.json":    "testdata/pve_maps_ru.json",
+		"pve_items_ru.json":   "testdata/pve_items_ru.json",
+		"svg/Interchange.svg": "testdata/Interchange.svg",
+	} {
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m[name] = &fstest.MapFile{Data: b, ModTime: snapshotAt}
 	}
-	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fs.hits.Add(1)
-		<-fs.hangCh()
-		if fs.fail.Load() {
-			http.Error(w, "fail", http.StatusInternalServerError)
-			return
-		}
-		if (r.URL.Path == "/svg/Interchange.svg" && !fs.svgMain) || (r.URL.Path == "/pve/items_ru" && fs.noItems) {
-			http.NotFound(w, r)
-			return
-		}
-		f, ok := files[r.URL.Path]
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeFile(w, r, f)
-	}))
-	t.Cleanup(fs.Close)
-	return fs
+	return m
 }
 
-var hangMu sync.Mutex
-
-func (fs *fakeServer) hangCh() chan struct{} {
-	hangMu.Lock()
-	defer hangMu.Unlock()
-	return fs.hang
-}
-
-// hangUntilCleanup: «висящая» сеть (прокси без выхода наружу) до вызова release
-// или конца теста.
-func (fs *fakeServer) hangUntilCleanup(t *testing.T) (release func()) {
-	ch := make(chan struct{})
-	hangMu.Lock()
-	fs.hang = ch
-	hangMu.Unlock()
-	var once sync.Once
-	release = func() { once.Do(func() { close(ch) }) }
-	t.Cleanup(release) // раньше fs.Close: Close ждёт активные запросы
-	return release
-}
-
-// waitFor ждёт условие до 2 с.
-func waitFor(cond func() bool) bool {
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		if cond() {
-			return true
-		}
-	}
-	return cond()
-}
-
-type clock struct{ t time.Time }
-
-func (c *clock) now() time.Time { return c.t }
-
-func newStore(t *testing.T, fs *fakeServer, c *clock, dir string) *Store {
+func loaded(t *testing.T) *Store {
 	t.Helper()
-	s := NewStore(dir, fs.Client(), c.now)
-	s.JSONBase = fs.URL
-	s.MapsJSONURL = fs.URL + "/maps.json"
-	s.SVGBase = fs.URL + "/svg"
-	s.SVGFallback = fs.URL + "/fb"
+	s := NewStore(snapshot(t))
+	if err := s.Load("pve"); err != nil {
+		t.Fatal(err)
+	}
 	return s
 }
 
-// Файлы кэша получают «текущее» время часов, чтобы проверять свежесть.
-func touchCache(t *testing.T, dir string, at time.Time) {
-	t.Helper()
-	entries, _ := os.ReadDir(dir)
-	for _, e := range entries {
-		if !e.IsDir() {
-			os.Chtimes(filepath.Join(dir, e.Name()), at, at)
-		}
-	}
-}
-
-func loaded(t *testing.T) (*Store, *fakeServer, *clock, string) {
-	t.Helper()
-	fs := newServer(t)
-	c := &clock{t: time.Now()}
-	dir := t.TempDir()
-	s := newStore(t, fs, c, dir)
-	if err := s.Load("pve", false); err != nil {
-		t.Fatal(err)
-	}
-	touchCache(t, dir, c.t)
-	return s, fs, c, dir
-}
-
 func TestLoadAndLookup(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	m, ok := s.MapByScene("maps/shopping_mall.bundle")
 	if !ok {
 		t.Fatal("Развязка не найдена по scenePath")
@@ -164,7 +81,7 @@ func TestSwitchFlag(t *testing.T) {
 }
 
 func TestMapDef(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	d, ok := s.MapDef("interchange")
 	if !ok {
 		t.Fatal("нет MapDef Развязки")
@@ -183,148 +100,64 @@ func TestMapDef(t *testing.T) {
 	}
 }
 
-func TestLoadUsesCacheWithin24h(t *testing.T) {
-	s, fs, c, _ := loaded(t)
-	before := fs.hits.Load()
-	c.t = c.t.Add(time.Hour)
-	if err := s.Load("pve", false); err != nil {
-		t.Fatal(err)
+// Режима нет в снимке или снимка нет вовсе — ErrNoData, а не паника.
+func TestLoadMissingIsNoData(t *testing.T) {
+	if err := NewStore(snapshot(t)).Load("regular"); !errors.Is(err, ErrNoData) {
+		t.Errorf("режима нет в снимке: %v, want ErrNoData", err)
 	}
-	if n := fs.hits.Load() - before; n != 0 {
-		t.Errorf("через час: %d запросов, want 0", n)
+	if err := NewStore(nil).Load("pve"); !errors.Is(err, ErrNoData) {
+		t.Errorf("без снимка: %v, want ErrNoData", err)
 	}
-	c.t = c.t.Add(24 * time.Hour)
-	if err := s.Load("pve", false); err != nil {
-		t.Fatal(err)
-	}
-	if fs.hits.Load() == before {
-		t.Error("через 25 ч данные не обновлялись")
+	if _, err := NewStore(nil).SVG(mapgeo.MapDef{SVGPath: "https://assets.tarkov.dev/maps/svg/Interchange.svg"}); err == nil {
+		t.Error("SVG без снимка вернул nil")
 	}
 }
 
-func TestLoadOfflineWithCache(t *testing.T) {
-	s, fs, c, _ := loaded(t)
-	fs.Close()
-	c.t = c.t.Add(25 * time.Hour)
-	if err := s.Load("pve", false); err != nil {
-		t.Fatalf("без сети с кэшем: %v", err)
+// Тот же режим повторно не разбирается: Load зовётся на каждую загрузку карты игрой.
+func TestLoadSameModeKeepsData(t *testing.T) {
+	src := snapshot(t)
+	s := NewStore(src)
+	if err := s.Load("pve"); err != nil {
+		t.Fatal(err)
+	}
+	src["pve_maps.json"] = &fstest.MapFile{Data: []byte("{битый")}
+	if err := s.Load("pve"); err != nil {
+		t.Errorf("повторный Load того же режима разбирал файлы заново: %v", err)
 	}
 	if _, ok := s.MapByScene("maps/shopping_mall.bundle"); !ok {
 		t.Error("данные пропали")
 	}
 }
 
-func TestLoadOfflineNoCache(t *testing.T) {
-	fs := newServer(t)
-	c := &clock{t: time.Now()}
-	s := newStore(t, fs, c, t.TempDir())
-	fs.Close()
-	if err := s.Load("pve", false); !errors.Is(err, ErrNoData) {
-		t.Errorf("err = %v, want ErrNoData", err)
-	}
-}
-
-func TestSVGFallbackAndCache(t *testing.T) {
-	s, fs, _, _ := loaded(t)
-	fs.svgMain = false
+func TestSVGFromSnapshot(t *testing.T) {
+	s := loaded(t)
+	want, _ := os.ReadFile("testdata/Interchange.svg")
 	d, _ := s.MapDef("interchange")
-	svg, err := s.SVG(d)
-	if err != nil || len(svg) == 0 {
-		t.Fatalf("SVG: %v", err)
+	if svg, err := s.SVG(d); err != nil || svg != string(want) {
+		t.Errorf("SVG Развязки: %d байт, %v", len(svg), err)
 	}
-	before := fs.hits.Load()
-	if _, err := s.SVG(d); err != nil {
-		t.Fatal(err)
-	}
-	if n := fs.hits.Load() - before; n != 0 {
-		t.Errorf("повторный SVG: %d запросов", n)
+	f, _ := s.MapDef("factory")
+	if _, err := s.SVG(f); err == nil {
+		t.Error("SVG Завода в снимке нет, а ошибки нет")
 	}
 }
 
-func TestLoadCachedIgnoresAge(t *testing.T) {
-	_, fs, c, dir := loaded(t)
-	s := newStore(t, fs, c, dir) // новый запуск
-	fs.Close()
-	c.t = c.t.Add(30 * 24 * time.Hour)
-	if err := s.LoadCached("pve"); err != nil {
-		t.Fatalf("LoadCached на месячном кэше: %v", err)
-	}
-	if _, ok := s.MapByScene("maps/shopping_mall.bundle"); !ok {
-		t.Error("данные из кэша не разобраны")
-	}
-	if !s.Stale("pve") {
-		t.Error("месячный кэш не считается устаревшим")
-	}
-	if err := newStore(t, fs, c, t.TempDir()).LoadCached("pve"); !errors.Is(err, ErrNoData) {
-		t.Errorf("без кэша: %v, want ErrNoData", err)
+// «Данные от …» в статусе — время снимка.
+func TestUpdatedIsSnapshotTime(t *testing.T) {
+	if got := loaded(t).Updated(); !got.Equal(snapshotAt) {
+		t.Errorf("Updated() = %v, want %v", got, snapshotAt)
 	}
 }
 
-func TestFetchReportsNetworkError(t *testing.T) {
-	_, fs, c, dir := loaded(t)
-	s := newStore(t, fs, c, dir)
-	fs.fail.Store(true)
-	if err := s.Fetch("pve", true); err == nil {
-		t.Error("Fetch при ошибке сервера вернул nil")
-	}
-	if err := s.LoadCached("pve"); err != nil {
-		t.Errorf("кэш испорчен неудачным Fetch: %v", err)
-	}
-}
-
-func TestSVGStaleServedAtOnceAndRefreshed(t *testing.T) {
-	s, fs, c, dir := loaded(t)
-	d, _ := s.MapDef("interchange")
-	if _, err := s.SVG(d); err != nil {
-		t.Fatal(err)
-	}
-	c.t = c.t.Add(25 * time.Hour)
-	release := fs.hangUntilCleanup(t)
-	before := fs.hits.Load()
-	done := make(chan struct{})
-	go func() { s.SVG(d); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("устаревший SVG ждёт сеть вместо отдачи из кэша")
-	}
-	if !waitFor(func() bool { return fs.hits.Load() > before }) {
-		t.Error("устаревший SVG не обновляется в фоне")
-	}
-	// дождаться конца фоновой закачки, иначе она пишет в уже удалённую папку теста
-	release()
-	p := filepath.Join(dir, "svg", "Interchange.svg")
-	if !waitFor(func() bool { _, busy := s.svgRefresh.Load(p); return !busy }) {
-		t.Error("фоновое обновление SVG не завершилось")
-	}
-}
-
-func TestRefreshSVG(t *testing.T) {
-	s, fs, c, _ := loaded(t)
-	d, _ := s.MapDef("interchange")
-	if _, err := s.SVG(d); err != nil {
-		t.Fatal(err)
-	}
-	before := fs.hits.Load()
-	c.t = c.t.Add(time.Minute)
-	if err := s.RefreshSVG(d); err != nil {
-		t.Fatalf("RefreshSVG: %v", err)
-	}
-	if fs.hits.Load() == before {
-		t.Error("RefreshSVG не перекачал свежий SVG")
-	}
-	fs.fail.Store(true)
-	if err := s.RefreshSVG(d); err == nil {
-		t.Error("RefreshSVG без сети вернул nil")
-	}
-	if svg, err := s.SVG(d); err != nil || svg == "" {
-		t.Errorf("после неудачного обновления SVG пропал: %v", err)
+func TestSVGName(t *testing.T) {
+	if got := SVGName(mapgeo.MapDef{SVGPath: "https://assets.tarkov.dev/maps/svg/Interchange.svg"}); got != "svg/Interchange.svg" {
+		t.Errorf("SVGName = %q", got)
 	}
 }
 
 // Список для ручного выбора: только карты, которые можно показать (есть SVG).
 func TestMapsListsOnlySupported(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	got := s.Maps()
 	want := []MapRef{{Scene: "maps/shopping_mall.bundle", ID: "interchange", Name: "Развязка"}}
 	if len(got) != len(want) || got[0] != want[0] {
@@ -333,7 +166,7 @@ func TestMapsListsOnlySupported(t *testing.T) {
 }
 
 func TestSVGDefs(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	defs := s.SVGDefs()
 	if len(defs) != 2 || path.Base(defs[0].SVGPath) != "Factory.svg" || path.Base(defs[1].SVGPath) != "Interchange.svg" {
 		t.Errorf("SVGDefs = %+v, want Factory.svg и Interchange.svg", defs)

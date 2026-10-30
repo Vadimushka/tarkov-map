@@ -5,10 +5,8 @@ import (
 	"bytes"
 	"fmt"
 	"io/fs"
-	"path"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Vadimushka/tarkov-map/internal/data"
 	"github.com/Vadimushka/tarkov-map/internal/settings"
@@ -39,17 +37,16 @@ func TestUpdateSettingsKeepsEveryChange(t *testing.T) {
 	}
 }
 
-// Снимок внутри exe цел и полон: битый или неполный zip означал бы exe, который без
-// сети молча не работает, — ради этого снимок и встраивается.
+// Снимок внутри exe цел и полон: других данных у программы нет, и битый или неполный
+// zip означал бы exe без карт.
 func TestSeedZipComplete(t *testing.T) {
 	zr, err := zip.NewReader(bytes.NewReader(seedZip), int64(len(seedZip)))
 	if err != nil {
 		t.Fatalf("снимок не открывается: %v", err)
 	}
-	s := data.NewStore(t.TempDir(), nil, time.Now)
-	s.Seed = zr
+	s := data.NewStore(zr)
 	for _, mode := range []string{"pve", "regular"} {
-		if err := s.LoadCached(mode); err != nil {
+		if err := s.Load(mode); err != nil {
 			t.Errorf("%s: %v", mode, err)
 		}
 		if _, err := fs.Stat(zr, mode+"_items_ru.json"); err != nil {
@@ -61,8 +58,8 @@ func TestSeedZipComplete(t *testing.T) {
 		t.Errorf("SVG-карт в maps.json: %d", len(defs))
 	}
 	for _, d := range defs {
-		if _, err := fs.Stat(zr, "svg/"+path.Base(d.SVGPath)); err != nil {
-			t.Errorf("в снимке нет %s", path.Base(d.SVGPath))
+		if svg, err := s.SVG(d); err != nil || svg == "" {
+			t.Errorf("в снимке нет %s", data.SVGName(d))
 		}
 	}
 }

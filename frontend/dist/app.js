@@ -182,7 +182,7 @@
     content = c;
     contentKey = key;
     lootQ.disabled = c.ItemsMissing;
-    lootQ.placeholder = c.ItemsMissing ? "Нет названий предметов — нажмите «Обновить данные»" : LOOT_PH;
+    lootQ.placeholder = c.ItemsMissing ? "В этой версии программы нет названий предметов" : LOOT_PH;
     lootN = TMap.setContent(c, lootQ.disabled ? "" : lootQ.value);
     fillCounts(c);
     showLootFound();
@@ -409,22 +409,6 @@
     } catch (e) {
       res.textContent = "Ошибка: " + e;
     }
-  });
-  $("#refresh-data").addEventListener("click", async (ev) => {
-    const btn = ev.currentTarget, res = $("#settings-result");
-    btn.disabled = true; // второе нажатие во время закачки только удвоило бы её
-    res.textContent = "Обновляем…";
-    try {
-      await go().RefreshData();
-      mapID = null; // перечитать подложку
-      res.textContent = "Данные обновлены";
-      loadView();
-    } catch (e) {
-      res.textContent = String(e);
-    } finally {
-      btn.disabled = false;
-    }
-    updateStatus().catch(console.error);
   });
 
   // --- запуск ---

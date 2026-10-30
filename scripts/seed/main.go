@@ -3,7 +3,8 @@
 //
 //	go run ./scripts/seed            # → assets/data.zip
 //
-// Запускать перед сборкой exe для передачи, чтобы данные в нём были свежими.
+// Приложение в сеть не ходит: новые данные попадают к игроку только с новой сборкой,
+// поэтому запускать перед сборкой exe для передачи.
 package main
 
 import (
@@ -23,7 +24,7 @@ import (
 func main() {
 	out := flag.String("o", "assets/data.zip", "куда записать снимок")
 	flag.Parse()
-	if err := run(*out); err != nil {
+	if err := run(*out, newDownloader(&http.Client{Timeout: 2 * time.Minute})); err != nil {
 		log.Fatal(err)
 	}
 	st, _ := os.Stat(*out)
@@ -31,28 +32,27 @@ func main() {
 }
 
 // run собирает снимок; прежний zip заменяется, только если новый собран и проверен целиком.
-func run(out string) error {
+func run(out string, d *downloader) error {
 	dir, err := os.MkdirTemp("", "tarkov-seed-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
 
-	s := data.NewStore(dir, &http.Client{Timeout: 2 * time.Minute}, time.Now)
+	if err := d.get(d.mapsJSON, filepath.Join(dir, "maps.json")); err != nil {
+		return fmt.Errorf("maps.json: %w", err)
+	}
+	s := data.NewStore(os.DirFS(dir))
 	for _, mode := range []string{"pve", "regular"} {
-		if err := s.Fetch(mode, true); err != nil {
+		if err := d.mode(dir, mode); err != nil {
 			return fmt.Errorf("%s: %w", mode, err)
 		}
-		// без названий предметов поиск лута у друга не заработает — снимок неполный
-		if _, err := os.Stat(filepath.Join(dir, mode+"_items_ru.json")); err != nil {
-			return fmt.Errorf("%s: названия предметов не скачались", mode)
-		}
-		if err := s.LoadCached(mode); err != nil { // скачанное разбирается
+		if err := s.Load(mode); err != nil { // скачанное разбирается
 			return fmt.Errorf("%s: %w", mode, err)
 		}
 	}
-	for _, d := range s.SVGDefs() {
-		if err := s.RefreshSVG(d); err != nil {
+	for _, def := range s.SVGDefs() {
+		if err := d.svg(dir, def); err != nil {
 			return err
 		}
 	}
@@ -64,8 +64,8 @@ func run(out string) error {
 	return os.Rename(tmp, out)
 }
 
-// writeZip пакует dir с путями через «/» и временем файлов: по нему Store решает,
-// новее ли снимок кэша.
+// writeZip пакует dir с путями через «/» и временем файлов: оно показывается в программе
+// как «данные от …».
 func writeZip(dir, out string) error {
 	f, err := os.Create(out)
 	if err != nil {

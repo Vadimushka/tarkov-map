@@ -1,32 +1,30 @@
 package core
 
 import (
+	"archive/zip"
 	"encoding/json"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Vadimushka/tarkov-map/internal/data"
 	"github.com/Vadimushka/tarkov-map/internal/gamelog"
 )
 
-// Выгрузка вида и меток реальных карт для проверки фронтенда в браузере:
-// TM_REAL_DATA=<кэш приложения> TM_DUMP=<папка>. Кэш копируется во временную папку
-// и не меняется; недостающие items_ru и SVG докачиваются из сети.
+// Выгрузка вида и меток реальных карт для проверки фронтенда в браузере: TM_DUMP=<папка>.
+// Данные — снимок assets/data.zip, тот же, что внутри exe.
 func TestDumpRealContent(t *testing.T) {
-	src, out := os.Getenv("TM_REAL_DATA"), os.Getenv("TM_DUMP")
-	if src == "" || out == "" {
-		t.Skip("только с TM_REAL_DATA и TM_DUMP")
+	out := os.Getenv("TM_DUMP")
+	if out == "" {
+		t.Skip("только с TM_DUMP")
 	}
-	dir := t.TempDir()
-	for _, name := range []string{"maps.json", "pve_maps.json", "pve_maps_ru.json", "pve_items_ru.json", "svg/Interchange.svg"} {
-		copyFile(t, filepath.Join(src, name), filepath.Join(dir, name))
+	zr, err := zip.OpenReader("../../assets/data.zip")
+	if err != nil {
+		t.Fatal(err)
 	}
-	store := data.NewStore(dir, &http.Client{Timeout: 60 * time.Second}, time.Now)
-	if err := store.Load("pve", false); err != nil {
+	defer zr.Close()
+	store := data.NewStore(zr)
+	if err := store.Load("pve"); err != nil {
 		t.Fatal(err)
 	}
 	for scene, name := range map[string]string{
@@ -56,26 +54,6 @@ func TestDumpRealContent(t *testing.T) {
 		}
 		t.Logf("%s: подписей %d, контейнеров %d, лута %d, предметов %d (нет названий: %v), замков %d, зон %d, пулемётов %d, точек боссов %d",
 			name, len(m.Places), len(m.Containers), len(m.Loot), len(m.Items), m.ItemsMissing, len(m.Locks), len(m.Hazards), len(m.Weapons), len(m.Bosses))
-	}
-}
-
-func copyFile(t *testing.T, from, to string) {
-	t.Helper()
-	in, err := os.Open(from)
-	if err != nil {
-		return // необязательный файл (items_ru, SVG) докачается
-	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	f, err := os.Create(to)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if _, err := io.Copy(f, in); err != nil {
-		t.Fatal(err)
 	}
 }
 

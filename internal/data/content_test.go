@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
+	"testing/fstest"
 
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
 )
 
 func TestLoadMapContent(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	m, _ := s.MapByScene("maps/shopping_mall.bundle")
 	if len(m.Containers) != 2 || m.Containers[0] != (Container{Group: "weapon", Type: "weapon-box", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}) {
 		t.Fatalf("Containers = %+v", m.Containers)
@@ -60,7 +59,7 @@ func TestContainerGroup(t *testing.T) {
 }
 
 func TestItemNames(t *testing.T) {
-	s, _, _, _ := loaded(t)
+	s := loaded(t)
 	if n, ok := s.ItemName("i_led"); !ok || n != (ItemName{Name: "Транспортир LEDX", Short: "LEDX"}) {
 		t.Errorf("i_led = %+v %v", n, ok)
 	}
@@ -73,12 +72,10 @@ func TestItemNames(t *testing.T) {
 }
 
 func TestMapsWorkWithoutItemsFile(t *testing.T) {
-	fs := newServer(t)
-	fs.noItems = true
-	c := &clock{t: time.Now()}
-	dir := t.TempDir()
-	s := newStore(t, fs, c, dir)
-	if err := s.Load("pve", false); err != nil {
+	src := snapshot(t)
+	delete(src, "pve_items_ru.json")
+	s := NewStore(src)
+	if err := s.Load("pve"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := s.MapByScene("maps/shopping_mall.bundle"); !ok {
@@ -87,31 +84,6 @@ func TestMapsWorkWithoutItemsFile(t *testing.T) {
 	if _, ok := s.ItemName("i_led"); ok {
 		t.Error("названий быть не должно")
 	}
-	if err := newStore(t, fs, c, dir).LoadCached("pve"); err != nil {
-		t.Errorf("LoadCached без items_ru: %v", err)
-	}
-}
-
-func TestStaleWantsItemsFileOnce(t *testing.T) {
-	fs := newServer(t)
-	fs.noItems = true
-	c := &clock{t: time.Now()}
-	dir := t.TempDir()
-	s := newStore(t, fs, c, dir)
-	for _, f := range s.files("pve") { // свежие обязательные файлы, items_ru нет
-		if err := s.download(f.url, filepath.Join(dir, f.name)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if !s.Stale("pve") {
-		t.Error("без items_ru данные считаются устаревшими — его надо попробовать скачать")
-	}
-	if err := s.Fetch("pve", true); err != nil {
-		t.Fatalf("Fetch не должен падать из-за items_ru: %v", err)
-	}
-	if s.Stale("pve") {
-		t.Error("после неудачной попытки items_ru до конца запуска не устаревает")
-	}
 }
 
 // Битый файл названий не ломает карту, но причина «нет названий» видна в логе.
@@ -119,9 +91,8 @@ func TestBrokenItemsLogged(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-	f := filepath.Join(t.TempDir(), "pve_items_ru.json")
-	os.WriteFile(f, []byte(`{"data": {"i_flash Name": "Флешка"`), 0o644)
-	if n := len(parseItems(f)); n != 0 {
+	src := fstest.MapFS{"pve_items_ru.json": {Data: []byte(`{"data": {"i_flash Name": "Флешка"`)}}
+	if n := len(parseItems(src, "pve_items_ru.json")); n != 0 {
 		t.Errorf("из битого файла разобрано %d названий", n)
 	}
 	if !strings.Contains(buf.String(), "pve_items_ru.json") {

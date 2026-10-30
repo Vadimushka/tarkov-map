@@ -67,7 +67,8 @@ button:disabled { opacity: .4; cursor: default; }
 input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: 12px ui-monospace, monospace; }
 .muted { color: var(--muted); font-size: 12px; }
 
-#view { flex: 1; position: relative; min-height: 0; }
+/* двойной щелчок по карте не выделяет подписи */
+#view { flex: 1; position: relative; min-height: 0; user-select: none; }
 #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
 #map.drag { cursor: grabbing; }
 #map[hidden] { display: none; }

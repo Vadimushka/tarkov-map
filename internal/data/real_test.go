@@ -2,23 +2,22 @@ package data
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
 )
 
-// Разбор полных реальных файлов: TM_REAL_DATA=<папка с maps.json, pve_maps.json, pve_maps_ru.json>
+// Разбор полных реальных файлов: TM_REAL_DATA=<папка с распакованным assets/data.zip>
 func TestParseRealFiles(t *testing.T) {
 	dir := os.Getenv("TM_REAL_DATA")
 	if dir == "" {
 		t.Skip("только с TM_REAL_DATA")
 	}
-	defs, labels, err := parseDefs(filepath.Join(dir, "maps.json"))
+	defs, labels, err := parseDefs(os.DirFS(dir), "maps.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	maps, err := parseMaps(filepath.Join(dir, "pve_maps.json"), filepath.Join(dir, "pve_maps_ru.json"))
+	maps, err := parseMaps(os.DirFS(dir), "pve_maps.json", "pve_maps_ru.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +30,7 @@ func TestParseRealFiles(t *testing.T) {
 	if !ok || len(ic.Extracts) != 9 || len(ic.Transits) != 2 {
 		t.Errorf("Развязка: ok=%v выходов=%d переходов=%d", ok, len(ic.Extracts), len(ic.Transits))
 	}
-	// числа — по кэшу PvE от 29.10.2026; данные tarkov.dev меняются — сверять с кэшем
+	// числа — по данным PvE от 29.10.2026; новый снимок — сверить и поправить
 	if len(ic.Containers) != 823 || len(ic.Loose) != 492 || len(ic.Locks) != 15 || len(ic.Hazards) != 25 ||
 		len(ic.Switches) != 6 || len(ic.Weapons) != 2 || len(ic.Bosses) != 2 {
 		t.Errorf("метки Развязки: контейнеров %d, лута %d, замков %d, зон %d, рубильников %d, пулемётов %d, боссов %d",
@@ -56,14 +55,14 @@ func TestParseRealFiles(t *testing.T) {
 	t.Logf("SVG-карт: %d, карт в данных: %d", len(defs), len(maps))
 }
 
-// Список ручного выбора на реальных данных: TM_REAL_DATA — папка кэша приложения.
+// Список ручного выбора на реальных данных: TM_REAL_DATA — папка с распакованным assets/data.zip.
 func TestRealMapsList(t *testing.T) {
 	dir := os.Getenv("TM_REAL_DATA")
 	if dir == "" {
 		t.Skip("только с TM_REAL_DATA")
 	}
-	s := NewStore(dir, nil, nil)
-	if err := s.parse("pve"); err != nil {
+	s := NewStore(os.DirFS(dir))
+	if err := s.Load("pve"); err != nil {
 		t.Fatal(err)
 	}
 	names := map[string]bool{}

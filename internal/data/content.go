@@ -2,9 +2,8 @@ package data
 
 import (
 	"encoding/json"
+	"io/fs"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
@@ -182,17 +181,17 @@ type ItemName struct{ Name, Short string }
 
 // parseItems читает items_ru: ключи "<id> Name" и "<id> ShortName". Нет файла или он
 // битый — пустой словарь: названия предметов необязательны.
-func parseItems(file string) map[string]ItemName {
+func parseItems(src fs.FS, name string) map[string]ItemName {
 	out := map[string]ItemName{}
 	var raw struct {
 		Data map[string]any `json:"data"`
 	}
-	b, err := os.ReadFile(file)
+	b, err := fs.ReadFile(src, name)
 	if err != nil {
 		return out // файла нет — обычное дело, поиск просто недоступен
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
-		log.Printf("названия предметов %s: %v", filepath.Base(file), err)
+		log.Printf("названия предметов %s: %v", name, err)
 		return out
 	}
 	for k, v := range raw.Data {

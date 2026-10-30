@@ -1,27 +1,21 @@
-// Package data скачивает и кэширует карты и точки tarkov.dev.
+// Package data читает карты и метки tarkov.dev из снимка, встроенного в exe
+// (его собирает scripts/seed). В сеть приложение не ходит: новые данные — новая сборка.
 package data
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"net/http"
-	"os"
 	"path"
-	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
 )
 
-var ErrNoData = errors.New("нет данных: нет сети и нет кэша")
-
-const ttl = 24 * time.Hour
+var ErrNoData = errors.New("в программе нет данных карт")
 
 // Extract — выход с карты. Faction: "pmc" | "scav" | "shared".
 type Extract struct {
@@ -55,238 +49,63 @@ var aliases = map[string]string{
 	"ground-zero-tutorial": "ground-zero",
 }
 
-const assetsSVG = "https://assets.tarkov.dev/maps/svg"
-
+// Store — данные одного режима из снимка. Файлы снимка: maps.json, {mode}_maps.json,
+// {mode}_maps_ru.json, {mode}_items_ru.json (необязателен: без него нет только поиска
+// лута) и svg/<имя>.svg.
 type Store struct {
-	JSONBase    string
-	MapsJSONURL string
-	SVGBase     string // "" — брать svgPath как есть
-	SVGFallback string
-	// Seed — снимок данных, встроенный в exe, с путями как в кэше (maps.json, svg/X.svg);
-	// nil — без снимка. Без сети приложение работает на нём с первого запуска.
-	Seed fs.FS
-
-	dir    string
-	client *http.Client
-	now    func() time.Time
+	src fs.FS
 
 	mu      sync.RWMutex
+	mode    string
 	byScene map[string]GameMap
 	defs    map[string]mapgeo.MapDef
 	labels  map[string][]Label
 	items   map[string]ItemName
 	updated time.Time
-
-	itemsFailed map[string]bool // режимы, для которых items_ru не скачался в этом запуске (под mu)
-
-	fileLocks  sync.Map // путь файла → *sync.Mutex закачки
-	svgRefresh sync.Map // путь SVG → идёт фоновое обновление
 }
 
-func NewStore(cacheDir string, client *http.Client, now func() time.Time) *Store {
-	return &Store{
-		JSONBase:    "https://json.tarkov.dev",
-		MapsJSONURL: "https://raw.githubusercontent.com/the-hideout/tarkov-dev/HEAD/src/data/maps.json",
-		SVGFallback: "https://raw.githubusercontent.com/the-hideout/tarkov-dev-svg-maps/HEAD",
-		dir:         cacheDir,
-		client:      client,
-		now:         now,
-	}
+// NewStore читает снимок src; nil — снимка нет, Load вернёт ErrNoData.
+func NewStore(src fs.FS) *Store {
+	return &Store{src: src}
 }
 
-type remoteFile struct{ url, name string }
-
-func (s *Store) files(mode string) []remoteFile {
-	return []remoteFile{
-		{s.MapsJSONURL, "maps.json"},
-		{s.JSONBase + "/" + mode + "/maps", mode + "_maps.json"},
-		{s.JSONBase + "/" + mode + "/maps_ru", mode + "_maps_ru.json"},
-	}
-}
-
-// itemsFile — названия предметов. Файл необязателен и в files не входит: без него
-// карта работает, недоступен только поиск лута.
-func (s *Store) itemsFile(mode string) remoteFile {
-	return remoteFile{s.JSONBase + "/" + mode + "/items_ru", mode + "_items_ru.json"}
-}
-
-// Load обновляет кэш режима ("pve" | "regular"), если он старше суток или force,
-// и разбирает данные. Без сети работает на кэше; без сети и без кэша — ErrNoData.
-func (s *Store) Load(mode string, force bool) error {
-	for _, f := range s.files(mode) {
-		if err := s.ensure(f.url, f.name, force); err != nil {
-			return err
-		}
-	}
-	it := s.itemsFile(mode)
-	_ = s.ensure(it.url, it.name, force)
-	return s.parse(mode)
-}
-
-// LoadCached разбирает кэш режима любой давности, не обращаясь к сети; нет файлов — ErrNoData.
-// Недостающее или более старое, чем снимок, сначала берётся из снимка.
-func (s *Store) LoadCached(mode string) error {
-	s.seed(s.itemsFile(mode).name)
-	for _, f := range s.files(mode) {
-		s.seed(f.name)
-		if _, err := os.Stat(filepath.Join(s.dir, f.name)); err != nil {
-			return fmt.Errorf("%w (%s)", ErrNoData, f.name)
-		}
-	}
-	return s.parse(mode)
-}
-
-// Stale — какого-то файла режима нет или он старше суток. Названия предметов учитываются,
-// только пока их не пытались скачать в этом запуске: иначе при недоступном items_ru каждая
-// загрузка карты заново качала бы все файлы режима.
-func (s *Store) Stale(mode string) bool {
-	for _, f := range s.files(mode) {
-		st, err := os.Stat(filepath.Join(s.dir, f.name))
-		if err != nil || s.now().Sub(st.ModTime()) >= ttl {
-			return true
-		}
-	}
+// Load делает текущими данные режима ("pve" | "regular"). Тот же режим повторно не
+// разбирается: Load зовётся на каждую загрузку карты игрой.
+func (s *Store) Load(mode string) error {
 	s.mu.RLock()
-	failed := s.itemsFailed[mode]
+	same := s.mode == mode
 	s.mu.RUnlock()
-	if failed {
-		return false
-	}
-	st, err := os.Stat(filepath.Join(s.dir, s.itemsFile(mode).name))
-	return err != nil || s.now().Sub(st.ModTime()) >= ttl
-}
-
-// Fetch скачивает файлы режима, не трогая данные в памяти: все при force, иначе только
-// отсутствующие и устаревшие. Ошибка — сеть не ответила; уже лежащие файлы при этом
-// остаются прежними. Неудача с названиями предметов ошибкой не считается, а только
-// запоминается (см. Stale).
-func (s *Store) Fetch(mode string, force bool) error {
-	for _, f := range s.files(mode) {
-		if !force && s.fresh(f.name) {
-			continue
-		}
-		if err := s.download(f.url, filepath.Join(s.dir, f.name)); err != nil {
-			return fmt.Errorf("%s: %w", f.name, err)
-		}
-	}
-	it := s.itemsFile(mode)
-	if !force && s.fresh(it.name) {
+	if same {
 		return nil
 	}
-	failed := s.download(it.url, filepath.Join(s.dir, it.name)) != nil
-	s.mu.Lock()
-	if s.itemsFailed == nil {
-		s.itemsFailed = map[string]bool{}
+	if s.src == nil {
+		return ErrNoData
 	}
-	s.itemsFailed[mode] = failed
-	s.mu.Unlock()
-	return nil
-}
-
-func (s *Store) parse(mode string) error {
-	defs, labels, err := parseDefs(filepath.Join(s.dir, "maps.json"))
+	defs, labels, err := parseDefs(s.src, "maps.json")
 	if err != nil {
-		return fmt.Errorf("maps.json: %w", err)
+		return noData("maps.json", err)
 	}
-	maps, err := parseMaps(filepath.Join(s.dir, mode+"_maps.json"), filepath.Join(s.dir, mode+"_maps_ru.json"))
+	maps, err := parseMaps(s.src, mode+"_maps.json", mode+"_maps_ru.json")
 	if err != nil {
-		return fmt.Errorf("%s_maps: %w", mode, err)
+		return noData(mode+"_maps.json", err)
 	}
-	items := parseItems(filepath.Join(s.dir, s.itemsFile(mode).name))
+	items := parseItems(s.src, mode+"_items_ru.json")
 	var updated time.Time
-	if st, err := os.Stat(filepath.Join(s.dir, mode+"_maps.json")); err == nil {
+	if st, err := fs.Stat(s.src, mode+"_maps.json"); err == nil {
 		updated = st.ModTime()
 	}
 	s.mu.Lock()
-	s.defs, s.labels, s.items, s.byScene, s.updated = defs, labels, items, maps, updated
+	s.mode, s.defs, s.labels, s.items, s.byScene, s.updated = mode, defs, labels, items, maps, updated
 	s.mu.Unlock()
 	return nil
 }
 
-func (s *Store) ensure(url, name string, force bool) error {
-	p := filepath.Join(s.dir, name)
-	st, statErr := os.Stat(p)
-	if statErr == nil && !force && s.now().Sub(st.ModTime()) < ttl {
-		return nil
+// noData: файла нет в снимке — ErrNoData, иначе файл не разбирается.
+func noData(name string, err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w (%s)", ErrNoData, name)
 	}
-	if err := s.download(url, p); err != nil {
-		if statErr == nil {
-			return nil // сети нет — живём на кэше
-		}
-		return fmt.Errorf("%w (%s: %v)", ErrNoData, name, err)
-	}
-	return nil
-}
-
-// fresh — файл кэша есть и моложе суток.
-func (s *Store) fresh(name string) bool {
-	st, err := os.Stat(filepath.Join(s.dir, name))
-	return err == nil && s.now().Sub(st.ModTime()) < ttl
-}
-
-// seed подкладывает в кэш файл из снимка, если в кэше его нет или он старше снимка.
-// Время файла — время снимка: устаревший снимок обновится из сети, как обычный кэш.
-// Битый снимок не мешает: файл остаётся каким был.
-func (s *Store) seed(name string) {
-	if s.Seed == nil {
-		return
-	}
-	src, err := fs.Stat(s.Seed, name)
-	if err != nil {
-		return
-	}
-	dst := filepath.Join(s.dir, filepath.FromSlash(name))
-	l, _ := s.fileLocks.LoadOrStore(dst, &sync.Mutex{})
-	l.(*sync.Mutex).Lock()
-	defer l.(*sync.Mutex).Unlock()
-	if cur, err := os.Stat(dst); err == nil && !cur.ModTime().Before(src.ModTime()) {
-		return
-	}
-	b, err := fs.ReadFile(s.Seed, name)
-	if err != nil || os.MkdirAll(filepath.Dir(dst), 0o755) != nil {
-		return
-	}
-	// своё имя временного файла: кэш может делить вторая копия приложения
-	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.seed")
-	if err != nil {
-		return
-	}
-	_, werr := tmp.Write(b)
-	if cerr := tmp.Close(); werr != nil || cerr != nil || os.Chtimes(tmp.Name(), src.ModTime(), src.ModTime()) != nil ||
-		os.Rename(tmp.Name(), dst) != nil {
-		os.Remove(tmp.Name())
-	}
-}
-
-// download атомарно заменяет dst; закачки одного файла идут по очереди (общий .tmp).
-func (s *Store) download(url, dst string) error {
-	l, _ := s.fileLocks.LoadOrStore(dst, &sync.Mutex{})
-	l.(*sync.Mutex).Lock()
-	defer l.(*sync.Mutex).Unlock()
-	resp, err := s.client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	tmp := dst + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, dst); err != nil {
-		return err
-	}
-	now := s.now()
-	return os.Chtimes(dst, now, now)
+	return fmt.Errorf("%s: %w", name, err)
 }
 
 func (s *Store) MapByScene(scenePath string) (GameMap, bool) {
@@ -361,53 +180,25 @@ func (s *Store) Labels(normalizedName string) []Label {
 	return s.labels[normalizedName]
 }
 
+// Updated — время снимка (когда scripts/seed скачал данные режима).
 func (s *Store) Updated() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.updated
 }
 
-// SVG отдаёт текст SVG-карты из кэша, при необходимости скачивая его. Устаревший
-// (старше суток) файл отдаётся сразу и обновляется в фоне — к следующему открытию карты.
+// SVG — текст SVG-карты из снимка.
 func (s *Store) SVG(def mapgeo.MapDef) (string, error) {
-	p := s.svgFile(def)
-	s.seed("svg/" + filepath.Base(p))
-	if b, err := os.ReadFile(p); err == nil {
-		if st, err := os.Stat(p); err == nil && s.now().Sub(st.ModTime()) >= ttl {
-			if _, busy := s.svgRefresh.LoadOrStore(p, true); !busy {
-				go func() {
-					defer s.svgRefresh.Delete(p)
-					_ = s.RefreshSVG(def)
-				}()
-			}
-		}
-		return string(b), nil
+	if s.src == nil {
+		return "", ErrNoData
 	}
-	if err := s.RefreshSVG(def); err != nil {
-		return "", err
-	}
-	b, err := os.ReadFile(p)
+	b, err := fs.ReadFile(s.src, SVGName(def))
 	return string(b), err
 }
 
-// RefreshSVG перекачивает SVG-карту (основной адрес, затем запасной); при неудаче
-// прежний файл остаётся.
-func (s *Store) RefreshSVG(def mapgeo.MapDef) error {
-	p := s.svgFile(def)
-	primary := def.SVGPath
-	if s.SVGBase != "" {
-		primary = strings.Replace(primary, assetsSVG, s.SVGBase, 1)
-	}
-	if err := s.download(primary, p); err != nil {
-		if err2 := s.download(s.SVGFallback+"/"+filepath.Base(p), p); err2 != nil {
-			return fmt.Errorf("SVG %s: %v; запасной адрес: %v", filepath.Base(p), err, err2)
-		}
-	}
-	return nil
-}
-
-func (s *Store) svgFile(def mapgeo.MapDef) string {
-	return filepath.Join(s.dir, "svg", path.Base(def.SVGPath))
+// SVGName — путь SVG-карты в снимке.
+func SVGName(def mapgeo.MapDef) string {
+	return "svg/" + path.Base(def.SVGPath)
 }
 
 // --- разбор maps.json (tarkov-dev) ---
@@ -432,8 +223,8 @@ type rawDef struct {
 	} `json:"layers"`
 }
 
-func parseDefs(file string) (map[string]mapgeo.MapDef, map[string][]Label, error) {
-	b, err := os.ReadFile(file)
+func parseDefs(src fs.FS, name string) (map[string]mapgeo.MapDef, map[string][]Label, error) {
+	b, err := fs.ReadFile(src, name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -510,8 +301,8 @@ type rawMap struct {
 	rawContent
 }
 
-func parseMaps(mapsFile, ruFile string) (map[string]GameMap, error) {
-	b, err := os.ReadFile(mapsFile)
+func parseMaps(src fs.FS, mapsName, ruName string) (map[string]GameMap, error) {
+	b, err := fs.ReadFile(src, mapsName)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +315,7 @@ func parseMaps(mapsFile, ruFile string) (map[string]GameMap, error) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, err
 	}
-	tr := loadTranslations(ruFile)
+	tr := loadTranslations(src, ruName)
 	out := map[string]GameMap{}
 	for _, m := range raw.Data.Maps {
 		gm := GameMap{ID: m.ID, NormalizedName: m.NormalizedName, Name: tr(m.Name), ScenePath: m.ScenePath}
@@ -552,11 +343,11 @@ func switchFlag(raw json.RawMessage) bool {
 }
 
 // loadTranslations: ключ → русская строка; нет перевода — сам ключ.
-func loadTranslations(file string) func(string) string {
+func loadTranslations(src fs.FS, name string) func(string) string {
 	var raw struct {
 		Data map[string]any `json:"data"`
 	}
-	if b, err := os.ReadFile(file); err == nil {
+	if b, err := fs.ReadFile(src, name); err == nil {
 		_ = json.Unmarshal(b, &raw)
 	}
 	return func(k string) string {

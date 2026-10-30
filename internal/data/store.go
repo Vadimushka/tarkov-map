@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -239,6 +240,27 @@ func (s *Store) MapByScene(scenePath string) (GameMap, bool) {
 	defer s.mu.RUnlock()
 	m, ok := s.byScene[scenePath]
 	return m, ok
+}
+
+// MapRef — карта в списке ручного выбора.
+type MapRef struct{ Scene, ID, Name string }
+
+// Maps — карты, которые можно показать (есть SVG), по названию.
+func (s *Store) Maps() []MapRef {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []MapRef{}
+	for scene, m := range s.byScene {
+		id := m.NormalizedName
+		if a, ok := aliases[id]; ok {
+			id = a
+		}
+		if _, ok := s.defs[id]; ok {
+			out = append(out, MapRef{Scene: scene, ID: m.NormalizedName, Name: m.Name})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // ItemName — название предмета по id; false — нет такого или нет файла названий.

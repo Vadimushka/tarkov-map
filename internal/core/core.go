@@ -23,6 +23,7 @@ type MapSource interface {
 type Snapshot struct {
 	Mode, MapID, MapName string
 	Supported            bool
+	Manual               bool // карта выбрана вручную, а не загружена игрой
 	RaidStart            time.Time
 	LastShot             string // "21:40" или ""
 	Message              string
@@ -50,15 +51,21 @@ type MapView struct {
 	ContentGen  int // меняется, когда метки карты (Content) могли измениться
 }
 
-type Core struct {
-	mu        sync.Mutex
-	src       MapSource
-	mode      string
+// mapState — карта по сцене; supported — для неё есть SVG.
+type mapState struct {
 	scene     string
 	gm        data.GameMap
 	known     bool
 	def       mapgeo.MapDef
 	supported bool
+}
+
+type Core struct {
+	mu        sync.Mutex
+	src       MapSource
+	mode      string
+	game      mapState // карта, которую загрузила игра: к ней относятся рейд и скрины
+	manual    mapState // выбранная вручную; пустая сцена — на экране карта игры
 	raidStart time.Time
 	raidEnd   time.Time // после него скрины — из убежища или меню
 	route     []shots.Shot
@@ -83,7 +90,8 @@ func (c *Core) OnLogEvent(e gamelog.Event) {
 	case gamelog.EvMode:
 		c.mode = e.Mode
 	case gamelog.EvMap:
-		c.scene = e.Bundle
+		c.game.scene = e.Bundle
+		c.manual = mapState{} // в рейде нужна карта рейда
 		c.resolve()
 		c.route, c.keys, c.held = nil, map[string]bool{}, nil
 		c.raidStart, c.raidEnd = time.Time{}, time.Time{}
@@ -108,7 +116,7 @@ func (c *Core) OnShot(name string, at time.Time) bool {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.supported {
+	if !c.game.supported {
 		return false
 	}
 	if c.raidStart.IsZero() {
@@ -138,33 +146,57 @@ func (c *Core) SetSource(src MapSource) {
 	c.resolve()
 }
 
+// SelectMap показывает карту по сцене вместо карты игры; "" — снова как в игре.
+// Рейд не меняется; выбор живёт до загрузки игрой следующей карты.
+func (c *Core) SelectMap(scene string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.manual = mapState{scene: scene}
+	c.resolve()
+}
+
 func (c *Core) resolve() {
 	c.gen++
-	c.gm, c.known = data.GameMap{}, false
-	c.def, c.supported = mapgeo.MapDef{}, false
-	if c.scene == "" || c.src == nil {
-		return
+	c.game = c.lookup(c.game.scene)
+	c.manual = c.lookup(c.manual.scene)
+}
+
+func (c *Core) lookup(scene string) mapState {
+	m := mapState{scene: scene}
+	if scene == "" || c.src == nil {
+		return m
 	}
-	c.gm, c.known = c.src.MapByScene(c.scene)
-	if c.known {
-		c.def, c.supported = c.src.MapDef(c.gm.NormalizedName)
+	m.gm, m.known = c.src.MapByScene(scene)
+	if m.known {
+		m.def, m.supported = c.src.MapDef(m.gm.NormalizedName)
 	}
+	return m
+}
+
+// shown — карта на экране.
+func (c *Core) shown() mapState {
+	if c.manual.scene != "" {
+		return c.manual
+	}
+	return c.game
 }
 
 func (c *Core) Snapshot() Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	s := Snapshot{Mode: c.mode, MapID: c.gm.NormalizedName, MapName: c.gm.Name, Supported: c.supported, RaidStart: c.raidStart}
+	m := c.shown()
+	s := Snapshot{Mode: c.mode, MapID: m.gm.NormalizedName, MapName: m.gm.Name, Supported: m.supported,
+		Manual: c.manual.scene != "", RaidStart: c.raidStart}
 	if n := len(c.route); n > 0 {
 		s.LastShot = c.route[n-1].Time
 	}
 	switch {
-	case c.scene == "":
-		s.Message = "Ждём загрузки карты в игре"
-	case !c.known:
-		s.Message = fmt.Sprintf("Неизвестная карта: %s", c.scene)
-	case !c.supported:
-		s.Message = fmt.Sprintf("Карта «%s» пока не поддерживается", c.gm.Name)
+	case m.scene == "":
+		s.Message = "Ждём загрузки карты в игре — или выберите карту в списке справа вверху"
+	case !m.known:
+		s.Message = fmt.Sprintf("Неизвестная карта: %s", m.scene)
+	case !m.supported:
+		s.Message = fmt.Sprintf("Карта «%s» пока не поддерживается", m.gm.Name)
 	}
 	return s
 }
@@ -172,25 +204,29 @@ func (c *Core) Snapshot() Snapshot {
 func (c *Core) View() MapView {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	m := c.shown()
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
-	v := MapView{MapID: c.gm.NormalizedName, Name: c.gm.Name, Supported: c.supported, Layers: []LayerInfo{}, Markers: []Marker{}, ContentGen: c.gen}
-	if !c.supported {
+	v := MapView{MapID: m.gm.NormalizedName, Name: m.gm.Name, Supported: m.supported, Layers: []LayerInfo{}, Markers: []Marker{}, ContentGen: c.gen}
+	if !m.supported {
 		return v
 	}
-	d := c.def
+	d := m.def
 	v.Rect = mapgeo.ImageRect(d)
 	v.Layers = append(v.Layers, LayerInfo{ID: d.SVGLayer})
 	for _, l := range d.Layers {
 		v.Layers = append(v.Layers, LayerInfo{ID: l.SVGLayer, Name: l.Name})
 	}
-	for _, e := range c.gm.Extracts {
+	for _, e := range m.gm.Extracts {
 		px, py := mapgeo.Project(d, e.Pos.X, e.Pos.Z)
 		v.Markers = append(v.Markers, Marker{Kind: "extract", Name: e.Name, Faction: e.Faction, Paid: e.Paid, Switch: e.Switch,
 			PX: px, PY: py, Layer: mapgeo.LayerOf(d, e.Pos)})
 	}
-	for _, t := range c.gm.Transits {
+	for _, t := range m.gm.Transits {
 		px, py := mapgeo.Project(d, t.Pos.X, t.Pos.Z)
 		v.Markers = append(v.Markers, Marker{Kind: "transit", Name: t.Name, PX: px, PY: py, Layer: mapgeo.LayerOf(d, t.Pos)})
+	}
+	if m.scene != c.game.scene { // маршрут рейда — только на карте рейда
+		return v
 	}
 	for _, s := range c.route {
 		px, py := mapgeo.Project(d, s.Pos.X, s.Pos.Z)

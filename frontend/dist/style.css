@@ -13,6 +13,7 @@ body { display: flex; flex-direction: column; }
 #ribbon { flex: none; background: var(--panel); border-bottom: 1px solid var(--line); user-select: none; }
 .tabs { display: flex; gap: 2px; padding: 4px 8px 0; }
 .tabs .spacer { flex: 1; }
+#map-pick { align-self: center; margin: 0 6px 2px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font: inherit; }
 #ribbon.collapsed .tab.active { background: none; border-color: transparent; box-shadow: none; color: var(--muted); }
 .tab { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; padding: 4px 14px; color: var(--muted); }
 .tab:hover:not(.active) { background: #2a2720; color: var(--text); }

@@ -371,11 +371,22 @@ window.TMap = (() => {
 
   // метки чужого этажа приглушены; названия мест не приглушаются, а подпись не базового
   // этажа видна только на своём — иначе магазины Развязки засыпали бы ТЦ на виде с земли
+  // Метки «Лут и места» — только своего этажа (подписи земли — всегда); выходы и маршрут
+  // с чужого этажа приглушены: выход нужен, на каком этаже ни стой.
   function dimNodes(root) {
     root.querySelectorAll("[data-layer]").forEach((n) => {
-      if (n.classList.contains("place")) n.style.display = n.dataset.layer === baseLayer || n.dataset.layer === floor ? "" : "none";
-      else n.style.opacity = n.dataset.layer === floor ? 1 : 0.35;
+      const own = n.dataset.layer === floor;
+      if (n.classList.contains("place")) n.style.display = own || n.dataset.layer === baseLayer ? "" : "none";
+      else if (content.contains(n)) n.style.display = own ? "" : "none";
+      else n.style.opacity = own ? 1 : 0.35;
     });
+  }
+
+  // lootHitsElsewhere — сколько совпавших точек лута на других этажах (они скрыты).
+  function lootHitsElsewhere() {
+    let n = 0;
+    if (lootHits && data) for (const i of lootHits) if (data.Loot[i].Layer !== floor) n++;
+    return n;
   }
 
   function setFilter(key, on) {
@@ -514,5 +525,5 @@ window.TMap = (() => {
     size = { w, h };
   }).observe(svg);
 
-  return { setSVG, clear, render, setContent, setLootQuery, setFloor, setFilter, centerOn, keepInView, fit };
+  return { setSVG, clear, render, setContent, setLootQuery, lootHitsElsewhere, setFloor, setFilter, centerOn, keepInView, fit };
 })();

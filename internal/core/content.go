@@ -71,19 +71,20 @@ type MapContent struct {
 func (c *Core) Content() MapContent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	g := c.shown()
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
-	m := MapContent{MapID: c.gm.NormalizedName, Gen: c.gen, Places: []PlacePt{}, Containers: []ContainerPt{},
+	m := MapContent{MapID: g.gm.NormalizedName, Gen: c.gen, Places: []PlacePt{}, Containers: []ContainerPt{},
 		Loot: []LootPt{}, Items: map[string]data.ItemName{}, Locks: []LockPt{}, Switches: []NamedPt{},
 		Hazards: []HazardArea{}, Weapons: []NamedPt{}, Bosses: []BossPt{}}
-	if !c.supported {
+	if !g.supported {
 		return m
 	}
-	d := c.def
+	d := g.def
 	at := func(p mapgeo.Vec3) Pt {
 		px, py := mapgeo.Project(d, p.X, p.Z)
 		return Pt{PX: px, PY: py, Layer: mapgeo.LayerOf(d, p)}
 	}
-	for _, l := range c.src.Labels(c.gm.NormalizedName) {
+	for _, l := range c.src.Labels(g.gm.NormalizedName) {
 		px, py := mapgeo.Project(d, l.X, l.Z)
 		layer := d.SVGLayer
 		if l.Bottom != nil && l.Top != nil {
@@ -91,10 +92,10 @@ func (c *Core) Content() MapContent {
 		}
 		m.Places = append(m.Places, PlacePt{Pt: Pt{PX: px, PY: py, Layer: layer}, Text: l.Text})
 	}
-	for _, ct := range c.gm.Containers {
+	for _, ct := range g.gm.Containers {
 		m.Containers = append(m.Containers, ContainerPt{Pt: at(ct.Pos), Group: ct.Group, Name: ct.Name})
 	}
-	for _, l := range c.gm.Loose {
+	for _, l := range g.gm.Loose {
 		m.Loot = append(m.Loot, LootPt{Pt: at(l.Pos), Items: l.Items})
 		for _, id := range l.Items {
 			if n, ok := c.src.ItemName(id); ok {
@@ -103,14 +104,14 @@ func (c *Core) Content() MapContent {
 		}
 	}
 	m.ItemsMissing = len(m.Loot) > 0 && len(m.Items) == 0
-	for _, l := range c.gm.Locks {
+	for _, l := range g.gm.Locks {
 		key, _ := c.src.ItemName(l.KeyID)
 		m.Locks = append(m.Locks, LockPt{Pt: at(l.Pos), Kind: l.Kind, Key: key.Name, NeedsPower: l.NeedsPower})
 	}
-	for _, s := range c.gm.Switches {
+	for _, s := range g.gm.Switches {
 		m.Switches = append(m.Switches, NamedPt{Pt: at(s.Pos), Name: s.Name})
 	}
-	for _, h := range c.gm.Hazards {
+	for _, h := range g.gm.Hazards {
 		a := HazardArea{Pt: at(h.Pos), Kind: h.Kind, Outline: [][2]float64{}}
 		for _, p := range h.Outline {
 			px, py := mapgeo.Project(d, p.X, p.Z)
@@ -118,10 +119,10 @@ func (c *Core) Content() MapContent {
 		}
 		m.Hazards = append(m.Hazards, a)
 	}
-	for _, w := range c.gm.Weapons {
+	for _, w := range g.gm.Weapons {
 		m.Weapons = append(m.Weapons, NamedPt{Pt: at(w.Pos), Name: w.Name})
 	}
-	for _, b := range c.gm.Bosses {
+	for _, b := range g.gm.Bosses {
 		for _, s := range b.Spots {
 			m.Bosses = append(m.Bosses, BossPt{Pt: at(s.Pos), Name: b.Name, Chance: b.Chance, SpotChance: s.Chance})
 		}

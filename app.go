@@ -286,6 +286,18 @@ func (a *App) GetMapContent() core.MapContent {
 	return a.core.Content()
 }
 
+// GetMaps — карты для ручного выбора.
+func (a *App) GetMaps() []data.MapRef {
+	return a.store.Maps()
+}
+
+// SelectMap показывает карту по сцене; "" — карта, которую загрузила игра.
+// Выбор действует до загрузки игрой следующей карты.
+func (a *App) SelectMap(scene string) {
+	a.core.SelectMap(scene)
+	a.markDirty()
+}
+
 func (a *App) GetSVG(mapID string) (string, error) {
 	def, ok := a.store.MapDef(mapID)
 	if !ok {

@@ -320,3 +320,13 @@ func TestRefreshSVG(t *testing.T) {
 		t.Errorf("после неудачного обновления SVG пропал: %v", err)
 	}
 }
+
+// Список для ручного выбора: только карты, которые можно показать (есть SVG).
+func TestMapsListsOnlySupported(t *testing.T) {
+	s, _, _, _ := loaded(t)
+	got := s.Maps()
+	want := []MapRef{{Scene: "maps/shopping_mall.bundle", ID: "interchange", Name: "Развязка"}}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("Maps() = %+v, want %+v — у Лаборатории нет SVG", got, want)
+	}
+}

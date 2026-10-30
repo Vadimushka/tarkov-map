@@ -55,3 +55,26 @@ func TestParseRealFiles(t *testing.T) {
 	}
 	t.Logf("SVG-карт: %d, карт в данных: %d", len(defs), len(maps))
 }
+
+// Список ручного выбора на реальных данных: TM_REAL_DATA — папка кэша приложения.
+func TestRealMapsList(t *testing.T) {
+	dir := os.Getenv("TM_REAL_DATA")
+	if dir == "" {
+		t.Skip("только с TM_REAL_DATA")
+	}
+	s := NewStore(dir, nil, nil)
+	if err := s.parse("pve"); err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, m := range s.Maps() {
+		t.Logf("%-40s %-22s %s", m.Scene, m.ID, m.Name)
+		if names[m.Name] {
+			t.Errorf("два пункта «%s» — в списке не различить", m.Name)
+		}
+		names[m.Name] = true
+	}
+	if !names["Улицы Таркова"] || !names["Развязка"] {
+		t.Errorf("нет Улиц или Развязки: %v", names)
+	}
+}

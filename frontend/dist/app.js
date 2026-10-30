@@ -71,7 +71,7 @@
       r.type = "radio";
       r.name = "floor";
       r.value = l.ID;
-      r.addEventListener("change", () => TMap.setFloor(l.ID));
+      r.addEventListener("change", () => selectFloor(l.ID));
       lab.append(r, floorName(l.Name));
       box.appendChild(lab);
     }
@@ -80,6 +80,7 @@
   function selectFloor(id) {
     TMap.setFloor(id);
     document.querySelectorAll("[name=floor]").forEach((r) => (r.checked = r.value === id));
+    showLootFound();
   }
 
   // --- метки вкладки «Лут и места» ---
@@ -122,10 +123,19 @@
   }
 
   // строка остаётся в поле, даже когда оно неактивно: появятся названия — поиск вернётся
+  let lootN = 0; // совпавших точек на всех этажах
+
   function applyLootQuery() {
+    lootN = TMap.setLootQuery(lootQ.disabled ? "" : lootQ.value);
+    showLootFound();
+  }
+
+  // точки других этажей скрыты — сказать, сколько из найденных видно на этом
+  function showLootFound() {
     const q = lootQ.disabled ? "" : lootQ.value;
-    const n = TMap.setLootQuery(q);
-    let text = q.trim().length < 2 ? "" : n ? "найдено " + points(n) : "не найдено";
+    let text = q.trim().length < 2 ? "" : lootN ? "найдено " + points(lootN) : "не найдено";
+    const off = text && lootN ? TMap.lootHitsElsewhere() : 0;
+    if (off) text = `найдено ${lootN}, на этаже ${lootN - off}`;
     if (lootQ.disabled && lootQ.value.trim()) text = "нет названий предметов"; // placeholder закрыт строкой
     $("#loot-found").textContent = text;
   }
@@ -264,6 +274,42 @@
     $("#follow").checked = true;
   });
 
+  // --- ручной выбор карты ---
+  const mapPick = $("#map-pick");
+  let filling = null;
+
+  // список заполняется, когда данные карт уже есть (при первом запуске их качают на старте)
+  function fillMapPick() {
+    if (mapPick.options.length > 1 || filling) return filling || Promise.resolve();
+    filling = go().GetMaps().then((maps) => {
+      for (const m of maps || []) {
+        const o = new Option(m.Name, m.Scene);
+        o.dataset.id = m.ID;
+        mapPick.add(o);
+      }
+      syncMapPick();
+    }).finally(() => (filling = null));
+    return filling;
+  }
+
+  function syncMapPick() {
+    const s = snapshot || {};
+    const o = s.Manual ? [...mapPick.options].find((x) => x.dataset.id === s.MapID) : null;
+    mapPick.value = o ? o.value : "";
+  }
+
+  // не ждать тика бэкенда (до секунды): снимок и вид — сразу
+  mapPick.addEventListener("change", async () => {
+    try {
+      await go().SelectMap(mapPick.value);
+      snapshot = await go().GetSnapshot();
+      await updateStatus();
+      await loadView();
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
   // --- статусная строка ---
   function fmtDate(iso) {
     const d = new Date(iso);
@@ -286,6 +332,9 @@
     };
     if (MODE[s.Mode]) add(MODE[s.Mode], "b");
     if (s.MapName) add(s.MapName, "b");
+    if (s.Manual) add("выбрана вручную");
+    syncMapPick();
+    fillMapPick().catch(console.error);
     if (s.LastShot) add("последний скрин " + s.LastShot);
     add(p.GameFound ? "игра найдена" : "игра не найдена", p.GameFound ? "" : "bad", p.Game || "путь не задан");
     add(p.ShotsFound ? "скрины найдены" : "скрины не найдены", p.ShotsFound ? "" : "bad", p.Shots || "путь не задан");

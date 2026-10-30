@@ -1,20 +1,26 @@
-# Тесты и сборка TarkovMap.exe на каждый push; тег v* (git tag v0.2.0 && git push origin v0.2.0)
-# ещё и выпускает релиз с exe. Данные карт — из assets/data.zip в репозитории.
+# Тесты и сборка TarkovMap.exe на push в main и в pull request. Релиз — кнопкой «Run workflow»
+# с версией (или gh workflow run build.yml -f version=v0.2.0): тот же прогон ставит тег
+# и выкладывает exe, поэтому на один коммит не бывает двух прогонов. Данные карт —
+# из assets/data.zip в репозитории.
 name: Сборка
 
 on:
   push:
-    branches: ["**"]
-    tags: ["v*"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия релиза, например v0.2.0; пусто — только сборка"
+        required: false
 
 permissions:
   contents: read
 
+# новый push отменяет недоделанный прогон той же ветки, но не релиз
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+  group: build-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: ${{ !inputs.version }}
 
 jobs:
   test-linux:
@@ -46,29 +52,37 @@ jobs:
     needs: [test-linux, test-windows]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # релиз по тегу
+      contents: write # тег и релиз
+    env:
+      RELEASE: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # прошлый тег — для списка изменений
+      - name: Проверить версию
+        if: env.RELEASE != ''
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "релиз выпускается только из main"; exit 1; }
+          [[ "$RELEASE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "версия должна быть вида v0.2.0: $RELEASE"; exit 1; }
+          ! git rev-parse -q --verify "refs/tags/$RELEASE" >/dev/null || { echo "тег $RELEASE уже есть"; exit 1; }
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Собрать
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then export VERSION="$GITHUB_REF_NAME"; else export VERSION="dev-${GITHUB_SHA::7}"; fi
+          export VERSION="${RELEASE:-dev-${GITHUB_SHA::7}}"
           scripts/build.sh
           cd build/bin && sha256sum TarkovMap.exe > TarkovMap.exe.sha256
       - uses: actions/upload-artifact@v7
         with:
-          name: TarkovMap-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          name: TarkovMap-${{ inputs.version || github.sha }}
           path: build/bin/TarkovMap.exe*
           retention-days: 3 # бесплатно 500 МБ на все артефакты
       - name: Релиз
-        if: github.ref_type == 'tag'
+        if: env.RELEASE != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/release-notes.sh "$GITHUB_REF_NAME" > notes.md
-          gh release create "$GITHUB_REF_NAME" build/bin/TarkovMap.exe build/bin/TarkovMap.exe.sha256 \
-            --title "Tarkov Map $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          scripts/release-notes.sh "$RELEASE" > notes.md
+          gh release create "$RELEASE" build/bin/TarkovMap.exe build/bin/TarkovMap.exe.sha256 \
+            --target "$GITHUB_SHA" --title "Tarkov Map $RELEASE" --notes-file notes.md

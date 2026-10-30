@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 tag="${1:?укажите тег, например v0.2.0}"
 ref="$tag"
-git rev-parse -q --verify "$ref^{commit}" >/dev/null || ref=HEAD # тега ещё нет — проверка перед выпуском
+git rev-parse -q --verify "$ref^{commit}" >/dev/null || ref=HEAD # тега ещё нет: релиз поставит его на HEAD
 
 # время файла в снимке — когда scripts/seed скачал данные
 data=$(unzip -l assets/data.zip pve_maps.json | awk '$4 == "pve_maps.json" {print $2}')

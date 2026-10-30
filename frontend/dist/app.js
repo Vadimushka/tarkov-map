@@ -318,6 +318,12 @@
     });
   });
   $("#collapse").addEventListener("click", () => setCollapsed(!ribbon.classList.contains("collapsed")));
+  // в узком окне лента не помещается и прокручивается вбок — колесом мыши тоже
+  document.querySelectorAll(".pane").forEach((p) => p.addEventListener("wheel", (ev) => {
+    if (p.scrollWidth <= p.clientWidth || ev.deltaX) return;
+    p.scrollLeft += ev.deltaY;
+    ev.preventDefault();
+  }, { passive: false }));
   let collapsed = false;
   try { collapsed = localStorage.getItem("ribbonCollapsed") === "1"; } catch (e) { /* по умолчанию развёрнута */ }
   setCollapsed(collapsed);

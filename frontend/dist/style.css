@@ -17,7 +17,9 @@ body { display: flex; flex-direction: column; }
 .tab { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; padding: 4px 14px; color: var(--muted); }
 .tab:hover:not(.active) { background: #2a2720; color: var(--text); }
 .tab.active { background: #25231c; border-color: var(--line); color: var(--text); box-shadow: inset 0 2px 0 var(--accent); }
-.pane { display: none; background: #25231c; border-top: 1px solid var(--line); margin-top: -1px; padding: 6px 4px 2px; min-height: 86px; }
+/* узкое окно: лента прокручивается вбок (колесом — см. app.js), а не обрезается */
+.pane { display: none; background: #25231c; border-top: 1px solid var(--line); margin-top: -1px; padding: 6px 4px 2px; min-height: 86px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 .pane.active { display: flex; }
 #ribbon.collapsed .pane { display: none; }
 .group { display: flex; flex-direction: column; padding: 0 10px; border-right: 1px solid var(--line); }
@@ -33,8 +35,15 @@ body { display: flex; flex-direction: column; }
 .sw.txt { width: auto; height: auto; border-radius: 0; font-size: 10px; line-height: 1; color: var(--muted); }
 .n { color: var(--muted); font-size: 11px; }
 .group label.empty { opacity: .45; }
+/* «Лут и места» шире «Главной»: уже отступы, контейнеры — 4 ряда в высоту трёх */
+[data-pane="loot"] .group { padding: 0 8px; }
+.items.grid.rows4 { grid-template-rows: repeat(4, auto); gap: 0 12px; }
+.items.grid.rows4 label { line-height: 15px; }
+.items.grid.rows4 input { margin-top: 1px; margin-bottom: 1px; }
+.items.col.loot { gap: 2px; }
 .loot .row { align-items: center; }
-#loot-q { width: 160px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
+#loot-found { font-size: 11px; min-height: 15px; }
+#loot-q { width: 130px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
 #loot-q:disabled { opacity: .6; }
 #loot-clear { padding: 2px 8px; }
 

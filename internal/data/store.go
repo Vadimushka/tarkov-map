@@ -144,6 +144,13 @@ func (s *Store) ItemName(id string) (ItemName, bool) {
 	return n, ok
 }
 
+// ItemCount — сколько предметов с названиями в данных режима (0 — нет файла названий).
+func (s *Store) ItemCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.items)
+}
+
 // MapDef возвращает параметры SVG-карты; false — карта без SVG.
 func (s *Store) MapDef(normalizedName string) (mapgeo.MapDef, bool) {
 	if a, ok := aliases[normalizedName]; ok {

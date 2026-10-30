@@ -11,9 +11,9 @@ import (
 	"github.com/Vadimushka/tarkov-map/internal/data"
 )
 
-// fakeTarkovDev — сервер с файлами internal/data/testdata по путям tarkov.dev; пути из
-// missing отвечают 404. SVG по основному адресу нет — берётся запасной.
-func fakeTarkovDev(t *testing.T, missing ...string) *downloader {
+// fakeTarkovDev — сервер с файлами internal/data/testdata по путям tarkov.dev. bodies
+// подменяет ответ по пути, пустая строка — 404. SVG по основному адресу нет — берётся запасной.
+func fakeTarkovDev(t *testing.T, bodies map[string]string) *downloader {
 	t.Helper()
 	td := "../../internal/data/testdata/"
 	files := map[string]string{
@@ -27,10 +27,14 @@ func fakeTarkovDev(t *testing.T, missing ...string) *downloader {
 		"/regular/maps_ru":    "pve_maps_ru.json",
 		"/regular/items_ru":   "pve_items_ru.json",
 	}
-	for _, m := range missing {
-		delete(files, m)
-	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if b, ok := bodies[r.URL.Path]; ok && b != "" {
+			w.Write([]byte(b))
+			return
+		} else if ok {
+			http.NotFound(w, r)
+			return
+		}
 		f, ok := files[r.URL.Path]
 		if !ok {
 			http.NotFound(w, r)
@@ -47,7 +51,7 @@ func fakeTarkovDev(t *testing.T, missing ...string) *downloader {
 
 func TestRunBuildsSnapshot(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "data.zip")
-	if err := run(out, fakeTarkovDev(t)); err != nil {
+	if err := run(out, fakeTarkovDev(t, nil)); err != nil {
 		t.Fatal(err)
 	}
 	zr, err := zip.OpenReader(out)
@@ -75,10 +79,31 @@ func TestRunBuildsSnapshot(t *testing.T) {
 func TestRunKeepsOldSnapshotOnFailure(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "data.zip")
 	os.WriteFile(out, []byte("прежний"), 0o644)
-	if err := run(out, fakeTarkovDev(t, "/regular/items_ru")); err == nil {
+	if err := run(out, fakeTarkovDev(t, map[string]string{"/regular/items_ru": ""})); err == nil {
 		t.Error("снимок без названий предметов собрался")
 	}
 	if b, _ := os.ReadFile(out); string(b) != "прежний" {
 		t.Error("прежний снимок испорчен")
+	}
+}
+
+// Сервер ответил 200, но не тем: снимок с битыми названиями или «картой»-страницей
+// ошибки ушёл бы другу молча — обновить его в программе уже нечем.
+func TestRunRejectsBrokenFiles(t *testing.T) {
+	for name, bodies := range map[string]map[string]string{
+		"битые названия":  {"/pve/items_ru": `{"data": {"i_led Name": "LEDX"`},
+		"пустые названия": {"/regular/items_ru": `{"errors": ["rate limit"]}`},
+		"SVG — не SVG":    {"/fb/Factory.svg": "<html>502 Bad Gateway</html>"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "data.zip")
+			os.WriteFile(out, []byte("прежний"), 0o644)
+			if err := run(out, fakeTarkovDev(t, bodies)); err == nil {
+				t.Error("снимок собрался")
+			}
+			if b, _ := os.ReadFile(out); string(b) != "прежний" {
+				t.Error("прежний снимок испорчен")
+			}
+		})
 	}
 }

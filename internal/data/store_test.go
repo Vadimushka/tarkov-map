@@ -172,3 +172,18 @@ func TestSVGDefs(t *testing.T) {
 		t.Errorf("SVGDefs = %+v, want Factory.svg и Interchange.svg", defs)
 	}
 }
+
+func TestItemCount(t *testing.T) {
+	if n := loaded(t).ItemCount(); n == 0 {
+		t.Error("названия предметов из снимка не посчитаны")
+	}
+	src := snapshot(t)
+	delete(src, "pve_items_ru.json")
+	s := NewStore(src)
+	if err := s.Load("pve"); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.ItemCount(); n != 0 {
+		t.Errorf("без файла названий ItemCount = %d", n)
+	}
+}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,7 +38,7 @@ func newDownloader(client *http.Client) *downloader {
 func (d *downloader) mode(dir, mode string) error {
 	for _, f := range []string{"maps", "maps_ru", "items_ru"} {
 		name := mode + "_" + f + ".json"
-		if err := d.get(d.jsonBase+"/"+mode+"/"+f, filepath.Join(dir, name)); err != nil {
+		if err := d.save(d.jsonBase+"/"+mode+"/"+f, filepath.Join(dir, name), nil); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
@@ -50,15 +52,16 @@ func (d *downloader) svg(dir string, def mapgeo.MapDef) error {
 	if d.svgBase != "" {
 		primary = strings.Replace(primary, assetsSVG, d.svgBase, 1)
 	}
-	if err := d.get(primary, dst); err != nil {
-		if err2 := d.get(d.svgFallback+"/"+filepath.Base(dst), dst); err2 != nil {
+	if err := d.save(primary, dst, isSVG); err != nil {
+		if err2 := d.save(d.svgFallback+"/"+filepath.Base(dst), dst, isSVG); err2 != nil {
 			return fmt.Errorf("SVG %s: %v; запасной адрес: %v", filepath.Base(dst), err, err2)
 		}
 	}
 	return nil
 }
 
-func (d *downloader) get(url, dst string) error {
+// save скачивает url в dst; check, если задан, проверяет ответ до записи.
+func (d *downloader) save(url, dst string, check func([]byte) error) error {
 	resp, err := d.client.Get(url)
 	if err != nil {
 		return err
@@ -71,8 +74,21 @@ func (d *downloader) get(url, dst string) error {
 	if err != nil {
 		return err
 	}
+	if check != nil {
+		if err := check(b); err != nil {
+			return err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 	return os.WriteFile(dst, b, 0o644)
+}
+
+// isSVG отсеивает ответы 200, которые не карта: страницы ошибок прокси и CDN.
+func isSVG(b []byte) error {
+	if !bytes.Contains(b[:min(len(b), 4096)], []byte("<svg")) {
+		return errors.New("ответ — не SVG")
+	}
+	return nil
 }

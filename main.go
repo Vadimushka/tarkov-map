@@ -13,7 +13,8 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// Снимок данных tarkov.dev (scripts/seed): с ним exe работает без сети с первого запуска.
+// Снимок данных tarkov.dev (scripts/seed) — единственный источник данных карт: в сеть
+// приложение не ходит.
 //
 //go:embed assets/data.zip
 var seedZip []byte

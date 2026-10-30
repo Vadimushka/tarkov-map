@@ -39,7 +39,7 @@ func run(out string, d *downloader) error {
 	}
 	defer os.RemoveAll(dir)
 
-	if err := d.get(d.mapsJSON, filepath.Join(dir, "maps.json")); err != nil {
+	if err := d.save(d.mapsJSON, filepath.Join(dir, "maps.json"), nil); err != nil {
 		return fmt.Errorf("maps.json: %w", err)
 	}
 	s := data.NewStore(os.DirFS(dir))
@@ -49,6 +49,10 @@ func run(out string, d *downloader) error {
 		}
 		if err := s.Load(mode); err != nil { // скачанное разбирается
 			return fmt.Errorf("%s: %w", mode, err)
+		}
+		// битый или пустой ответ разбор молча пропускает, а без названий у друга не будет поиска лута
+		if s.ItemCount() == 0 {
+			return fmt.Errorf("%s: в названиях предметов пусто", mode)
 		}
 	}
 	for _, def := range s.SVGDefs() {

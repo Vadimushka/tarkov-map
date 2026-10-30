@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"io/fs"
+	"strings"
 	"sync"
 	"testing"
 
@@ -49,7 +49,7 @@ func TestSeedZipComplete(t *testing.T) {
 		if err := s.Load(mode); err != nil {
 			t.Errorf("%s: %v", mode, err)
 		}
-		if _, err := fs.Stat(zr, mode+"_items_ru.json"); err != nil {
+		if s.ItemCount() == 0 {
 			t.Errorf("%s: нет названий предметов", mode)
 		}
 	}
@@ -58,7 +58,7 @@ func TestSeedZipComplete(t *testing.T) {
 		t.Errorf("SVG-карт в maps.json: %d", len(defs))
 	}
 	for _, d := range defs {
-		if svg, err := s.SVG(d); err != nil || svg == "" {
+		if svg, err := s.SVG(d); err != nil || !strings.Contains(svg, "<svg") {
 			t.Errorf("в снимке нет %s", data.SVGName(d))
 		}
 	}

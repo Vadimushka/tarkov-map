@@ -14,77 +14,120 @@ import (
 // Watcher сообщает о новых *.png в папке. Сам файл не открывается:
 // его может удалить другой процесс сразу после создания (скрипт TM).
 type Watcher struct {
-	fw   *fsnotify.Watcher
 	stop chan struct{}
 	done chan struct{}
 }
 
-// retryEvery — как часто проверять, есть ли папка: игра создаёт Screenshots только
-// при первом скрине, а игрок может её удалить и создать заново.
+// retryEvery — как часто проверять папку: игра создаёт Screenshots только при первом
+// скрине, а игрок может её удалить или переименовать и создать заново.
 var retryEvery = 2 * time.Second
 
 // NewWatcher следит за dir; если папки нет (ещё нет или её удалили), начнёт следить,
-// когда она появится.
+// когда она появится. Так же подхватывается новая папка на месте переименованной.
 func NewWatcher(dir string, onShot func(name string, at time.Time)) (*Watcher, error) {
+	d, err := watchDir(dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	w := &Watcher{stop: make(chan struct{}), done: make(chan struct{})}
+	go w.run(dir, d, onShot)
+	return w, nil
+}
+
+func (w *Watcher) run(dir string, d *dirWatch, onShot func(name string, at time.Time)) {
+	defer close(w.done)
+	defer func() { d.close() }()
+	t := time.NewTicker(retryEvery)
+	defer t.Stop()
+	for {
+		var events <-chan fsnotify.Event
+		var errs <-chan error
+		if d != nil {
+			events, errs = d.fw.Events, d.fw.Errors
+		}
+		select {
+		case <-t.C:
+			if d.gone(dir) {
+				d.close()
+				d = nil
+			}
+			if d == nil {
+				if nd, err := watchDir(dir); err == nil {
+					d = nd
+					// игра создаёт папку вместе с первым скрином — Create для него уже не придёт
+					reportExisting(dir, onShot)
+				}
+			}
+		case ev, ok := <-events:
+			if !ok {
+				d = nil
+				continue
+			}
+			if ev.Has(fsnotify.Create) && strings.EqualFold(filepath.Ext(ev.Name), ".png") {
+				onShot(filepath.Base(ev.Name), time.Now())
+			}
+			// удалили или переименовали саму папку (так сообщает Linux) — ждём новую
+			if ev.Has(fsnotify.Remove|fsnotify.Rename) && samePath(ev.Name, dir) {
+				d.close()
+				d = nil
+			}
+		case _, ok := <-errs:
+			if !ok {
+				d = nil
+			}
+		case <-w.stop:
+			return
+		}
+	}
+}
+
+func (w *Watcher) Close() {
+	close(w.stop)
+	<-w.done
+}
+
+// dirWatch — слежение за одной папкой; id — какая это папка, чтобы заметить подмену.
+type dirWatch struct {
+	fw *fsnotify.Watcher
+	id os.FileInfo
+}
+
+// watchDir начинает следить за dir; папки нет — ошибка с fs.ErrNotExist.
+func watchDir(dir string) (*dirWatch, error) {
+	id, err := os.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	os.SameFile(id, id) // Windows читает номер папки лениво — прочитать, пока папка та же
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
-	w := &Watcher{fw: fw, stop: make(chan struct{}), done: make(chan struct{})}
-	waiting := false
 	if err := fw.Add(dir); err != nil {
-		if _, serr := os.Stat(dir); !errors.Is(serr, fs.ErrNotExist) {
-			fw.Close()
-			return nil, err
-		}
-		waiting = true
+		fw.Close()
+		return nil, err
 	}
-	go func() {
-		defer close(w.done)
-		t := time.NewTicker(retryEvery)
-		defer t.Stop()
-		for {
-			select {
-			case <-t.C:
-				_, err := os.Stat(dir)
-				switch {
-				case err != nil && !waiting: // папку удалили, а событие не пришло
-					_ = fw.Remove(dir)
-					waiting = true
-				case err == nil && waiting && fw.Add(dir) == nil:
-					waiting = false
-					// игра создаёт папку вместе с первым скрином — Create для него уже не придёт
-					reportExisting(dir, onShot)
-				}
-			case ev, ok := <-fw.Events:
-				if !ok {
-					return
-				}
-				if ev.Has(fsnotify.Create) && strings.EqualFold(filepath.Ext(ev.Name), ".png") {
-					onShot(filepath.Base(ev.Name), time.Now())
-				}
-				// удалили или переименовали саму папку: слежение за ней пропало — ждём новую
-				if ev.Has(fsnotify.Remove|fsnotify.Rename) && samePath(ev.Name, dir) {
-					_ = fw.Remove(dir)
-					waiting = true
-				}
-			case _, ok := <-fw.Errors:
-				if !ok {
-					return
-				}
-			case <-w.stop:
-				return
-			}
-		}
-	}()
-	return w, nil
+	return &dirWatch{fw: fw, id: id}, nil
 }
 
-func (w *Watcher) Close() error {
-	close(w.stop)
-	err := w.fw.Close()
-	<-w.done
-	return err
+// gone — по пути dir папки больше нет или там уже другая: прежнюю переименовали, а
+// Windows об этом не сообщает и шлёт её события с прежним путём. Прочие ошибки
+// (нет доступа, сбой диска) слежение не снимают.
+func (d *dirWatch) gone(dir string) bool {
+	if d == nil {
+		return false
+	}
+	cur, err := os.Stat(dir)
+	if err != nil {
+		return errors.Is(err, fs.ErrNotExist)
+	}
+	return !os.SameFile(cur, d.id)
+}
+
+func (d *dirWatch) close() {
+	if d != nil {
+		d.fw.Close()
+	}
 }
 
 // reportExisting сообщает о *.png, уже лежащих в папке; повторы отсеивает ядро по ключу скрина.

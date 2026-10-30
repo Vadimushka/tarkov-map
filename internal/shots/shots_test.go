@@ -206,3 +206,55 @@ func TestWatcherDirRecreated(t *testing.T) {
 		}
 	}
 }
+
+// Папку переименовали, игра создала новую: скрины из старой (уже не той, что задана
+// в настройках) в маршрут не попадают, из новой — попадают.
+func TestWatcherDirRenamed(t *testing.T) {
+	old := retryEvery
+	retryEvery = 20 * time.Millisecond
+	t.Cleanup(func() { retryEvery = old })
+	base := t.TempDir()
+	dir, moved := filepath.Join(base, "Screenshots"), filepath.Join(base, "Screenshots_old")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan string, 100)
+	w, err := NewWatcher(dir, func(name string, at time.Time) { got <- name })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	if err := os.Rename(dir, moved); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for err := os.Mkdir(dir, 0o755); err != nil; err = os.Mkdir(dir, 0o755) {
+		if time.Now().After(deadline) {
+			t.Fatalf("папку не создать заново: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for i := 0; ; i++ { // новую папку подхватили
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("2026-10-30[23-00]_%d.png", i)), nil, 0o644)
+		select {
+		case <-got:
+		case <-time.After(100 * time.Millisecond):
+			if time.Now().After(deadline) {
+				t.Fatal("скрин в новой папке не замечен")
+			}
+			continue
+		}
+		break
+	}
+	os.WriteFile(filepath.Join(moved, "old.png"), nil, 0o644)
+	for end := time.After(300 * time.Millisecond); ; {
+		select {
+		case n := <-got:
+			if n == "old.png" {
+				t.Fatal("скрин из переименованной папки попал в маршрут")
+			}
+		case <-end:
+			return
+		}
+	}
+}

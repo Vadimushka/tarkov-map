@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
 )
 
 // Разбор полных реальных файлов: TM_REAL_DATA=<папка с maps.json, pve_maps.json, pve_maps_ru.json>
@@ -12,7 +14,7 @@ func TestParseRealFiles(t *testing.T) {
 	if dir == "" {
 		t.Skip("только с TM_REAL_DATA")
 	}
-	defs, _, err := parseDefs(filepath.Join(dir, "maps.json"))
+	defs, labels, err := parseDefs(filepath.Join(dir, "maps.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,6 +30,28 @@ func TestParseRealFiles(t *testing.T) {
 	ic, ok := maps["maps/shopping_mall.bundle"]
 	if !ok || len(ic.Extracts) != 9 || len(ic.Transits) != 2 {
 		t.Errorf("Развязка: ok=%v выходов=%d переходов=%d", ok, len(ic.Extracts), len(ic.Transits))
+	}
+	// числа — по кэшу PvE от 29.10.2026; данные tarkov.dev меняются — сверять с кэшем
+	if len(ic.Containers) != 823 || len(ic.Loose) != 492 || len(ic.Locks) != 15 || len(ic.Hazards) != 25 ||
+		len(ic.Switches) != 6 || len(ic.Weapons) != 2 || len(ic.Bosses) != 2 {
+		t.Errorf("метки Развязки: контейнеров %d, лута %d, замков %d, зон %d, рубильников %d, пулемётов %d, боссов %d",
+			len(ic.Containers), len(ic.Loose), len(ic.Locks), len(ic.Hazards), len(ic.Switches), len(ic.Weapons), len(ic.Bosses))
+	}
+	floors := map[string]int{}
+	for _, l := range labels["interchange"] {
+		if l.Bottom != nil && l.Top != nil {
+			floors[mapgeo.LayerOfSpan(defs["interchange"], l.X, l.Z, *l.Bottom, *l.Top)]++
+		} else {
+			floors[defs["interchange"].SVGLayer]++
+		}
+	}
+	if floors["Ground_Level"] != 14 || floors["First_Floor"] != 33 || floors["Second_Floor"] != 30 {
+		t.Errorf("этажи подписей Развязки: %v", floors)
+	}
+	for _, l := range labels["shoreline"] {
+		if l.Bottom != nil && l.Top != nil && mapgeo.LayerOfSpan(defs["shoreline"], l.X, l.Z, *l.Bottom, *l.Top) != defs["shoreline"].SVGLayer {
+			t.Errorf("Берег: подпись %q не на земле", l.Text)
+		}
 	}
 	t.Logf("SVG-карт: %d, карт в данных: %d", len(defs), len(maps))
 }

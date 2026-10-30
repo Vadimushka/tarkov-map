@@ -89,3 +89,33 @@ func TestForward(t *testing.T) {
 	near(t, "fx", fx, 0, 1e-12)
 	near(t, "fz", fz, 1, 1e-12)
 }
+
+func TestLayerOfSpan(t *testing.T) {
+	mall := [][2][2]float64{{{120, 218}, {-222, -327}}}
+	ic := MapDef{SVGLayer: "Ground_Level", Layers: []Layer{
+		{Name: "2nd Floor", SVGLayer: "First_Floor", Extents: []Extent{{Height: [2]float64{25, 34}, Bounds: mall}}},
+		{Name: "3rd Floor", SVGLayer: "Second_Floor", Extents: []Extent{{Height: [2]float64{34, 1000}, Bounds: mall}}},
+	}}
+	factory := MapDef{SVGLayer: "Ground_Floor", Layers: []Layer{
+		{Name: "3rd Floor", SVGLayer: "Third_Floor", Extents: []Extent{{Height: [2]float64{6, 10000}}}},
+		{Name: "Underground", SVGLayer: "Underground_Level", Extents: []Extent{{Height: [2]float64{-1000, 0.5}}}},
+	}}
+	cases := []struct {
+		name              string
+		md                MapDef
+		x, z, bottom, top float64
+		want              string
+	}{
+		{"магазин 2-го этажа ТЦ", ic, -34, -235, 25, 33, "First_Floor"},
+		{"магазин 3-го этажа ТЦ", ic, -34, -235, 34, 999, "Second_Floor"},
+		{"земля", ic, -34, -235, -1, 10, "Ground_Level"},
+		{"вне прямоугольника этажа", ic, 300, 300, 25, 33, "Ground_Level"},
+		{"верх включительно", factory, 0, 0, 6, 10000, "Third_Floor"},
+		{"диапазон шире любого этажа (санаторий Берега)", factory, 0, 0, -100, 100, "Ground_Floor"},
+	}
+	for _, c := range cases {
+		if got := LayerOfSpan(c.md, c.x, c.z, c.bottom, c.top); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}

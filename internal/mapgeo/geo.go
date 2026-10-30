@@ -84,6 +84,28 @@ func LayerOf(md MapDef, p Vec3) string {
 	return md.SVGLayer
 }
 
+// LayerOfSpan — этаж подписи с диапазоном высот [bottom, top]: тот, в один extent которого
+// диапазон укладывается целиком (границы включительно) и в чьи прямоугольники попадает
+// точка. Диапазон шире любого этажа (санаторий Берега: -100…100) — базовый слой.
+func LayerOfSpan(md MapDef, x, z, bottom, top float64) string {
+	for _, l := range md.Layers {
+		for _, e := range l.Extents {
+			if bottom < e.Height[0] || top > e.Height[1] {
+				continue
+			}
+			if len(e.Bounds) == 0 {
+				return l.SVGLayer
+			}
+			for _, bb := range e.Bounds {
+				if inside(bb, x, z) {
+					return l.SVGLayer
+				}
+			}
+		}
+	}
+	return md.SVGLayer
+}
+
 func inside(bb [2][2]float64, x, z float64) bool {
 	return x >= math.Min(bb[0][0], bb[1][0]) && x <= math.Max(bb[0][0], bb[1][0]) &&
 		z >= math.Min(bb[0][1], bb[1][1]) && z <= math.Max(bb[0][1], bb[1][1])

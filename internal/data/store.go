@@ -68,6 +68,7 @@ type Store struct {
 	mu      sync.RWMutex
 	byScene map[string]GameMap
 	defs    map[string]mapgeo.MapDef
+	labels  map[string][]Label
 	updated time.Time
 
 	fileLocks  sync.Map // путь файла → *sync.Mutex закачки
@@ -139,7 +140,7 @@ func (s *Store) Fetch(mode string) error {
 }
 
 func (s *Store) parse(mode string) error {
-	defs, err := parseDefs(filepath.Join(s.dir, "maps.json"))
+	defs, labels, err := parseDefs(filepath.Join(s.dir, "maps.json"))
 	if err != nil {
 		return fmt.Errorf("maps.json: %w", err)
 	}
@@ -152,7 +153,7 @@ func (s *Store) parse(mode string) error {
 		updated = st.ModTime()
 	}
 	s.mu.Lock()
-	s.defs, s.byScene, s.updated = defs, maps, updated
+	s.defs, s.labels, s.byScene, s.updated = defs, labels, maps, updated
 	s.mu.Unlock()
 	return nil
 }
@@ -221,6 +222,16 @@ func (s *Store) MapDef(normalizedName string) (mapgeo.MapDef, bool) {
 	return d, ok
 }
 
+// Labels — подписи мест SVG-карты (варианты карт без своей SVG — по aliases).
+func (s *Store) Labels(normalizedName string) []Label {
+	if a, ok := aliases[normalizedName]; ok {
+		normalizedName = a
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.labels[normalizedName]
+}
+
 func (s *Store) Updated() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -280,6 +291,7 @@ type rawDef struct {
 	SVGBounds          *[2][2]float64 `json:"svgBounds"`
 	SVGPath            string         `json:"svgPath"`
 	SVGLayer           string         `json:"svgLayer"`
+	Labels             []rawLabel     `json:"labels"`
 	Layers             []struct {
 		Name     string `json:"name"`
 		SVGLayer string `json:"svgLayer"`
@@ -290,29 +302,30 @@ type rawDef struct {
 	} `json:"layers"`
 }
 
-func parseDefs(file string) (map[string]mapgeo.MapDef, error) {
+func parseDefs(file string) (map[string]mapgeo.MapDef, map[string][]Label, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var raw []struct {
 		NormalizedName string   `json:"normalizedName"`
 		Maps           []rawDef `json:"maps"`
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out := map[string]mapgeo.MapDef{}
+	out, labels := map[string]mapgeo.MapDef{}, map[string][]Label{}
 	for _, m := range raw {
 		for _, d := range m.Maps {
 			if d.Projection != "interactive" || d.SVGPath == "" {
 				continue
 			}
 			out[m.NormalizedName] = toDef(d)
+			labels[m.NormalizedName] = toLabels(d.Labels)
 			break
 		}
 	}
-	return out, nil
+	return out, labels, nil
 }
 
 func toDef(d rawDef) mapgeo.MapDef {

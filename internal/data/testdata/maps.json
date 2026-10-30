@@ -141,6 +141,40 @@
               }
             ]
           }
+        ],
+        "labels": [
+          {
+            "position": [
+              -34,
+              -235
+            ],
+            "text": "IDEA",
+            "top": 33,
+            "bottom": 25
+          },
+          {
+            "position": [
+              -186,
+              -319
+            ],
+            "text": "Power Station",
+            "top": 10,
+            "bottom": -1,
+            "size": 80
+          },
+          {
+            "position": [
+              300,
+              300
+            ],
+            "text": "Garage A"
+          },
+          {
+            "position": [
+              1
+            ],
+            "text": "Битая"
+          }
         ]
       }
     ]

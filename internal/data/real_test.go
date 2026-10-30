@@ -12,7 +12,7 @@ func TestParseRealFiles(t *testing.T) {
 	if dir == "" {
 		t.Skip("только с TM_REAL_DATA")
 	}
-	defs, err := parseDefs(filepath.Join(dir, "maps.json"))
+	defs, _, err := parseDefs(filepath.Join(dir, "maps.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

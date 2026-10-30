@@ -153,7 +153,15 @@
   async function loadContent(v) {
     const key = v.MapID + "#" + v.ContentGen;
     if (key === contentKey) return true;
-    const c = await go().GetMapContent();
+    let c;
+    try {
+      c = await go().GetMapContent();
+    } catch (e) {
+      // метки — дополнение: без них карта, выходы и маршрут работают; следующий вид попробует снова
+      console.error(e);
+      dropContent();
+      return true;
+    }
     if (c.MapID !== v.MapID || c.Gen !== v.ContentGen) return false;
     for (const k of ["Places", "Containers", "Loot", "Locks", "Switches", "Hazards", "Weapons", "Bosses"]) c[k] = c[k] || [];
     c.Items = c.Items || {};

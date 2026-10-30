@@ -34,8 +34,13 @@ window.TMap = (() => {
   function showTip(ev, text) {
     tip.style.display = "block";
     tip.textContent = text;
-    tip.style.left = ev.clientX + 12 + "px";
-    tip.style.top = ev.clientY + 12 + "px";
+    // у края окна — по другую сторону курсора, чтобы подсказка не обрезалась
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = ev.clientX + 12, y = ev.clientY + 12;
+    if (x + w > innerWidth) x = Math.max(0, ev.clientX - 12 - w);
+    if (y + h > innerHeight) y = Math.max(0, ev.clientY - 12 - h);
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
   }
   function hover(node, text) {
     node.addEventListener("mousemove", (ev) => showTip(ev, text));

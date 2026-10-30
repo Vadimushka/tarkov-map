@@ -75,7 +75,7 @@ input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid
 #status b { color: var(--text); font-weight: 600; }
 #status .bad { color: #f07b6b; }
 
-#tip { position: fixed; pointer-events: none; background: #000c; padding: 4px 8px; border-radius: 4px; font-size: 12px; display: none; white-space: pre; z-index: 10; }
+#tip { position: fixed; pointer-events: none; background: #000c; padding: 4px 8px; border-radius: 4px; font-size: 12px; display: none; white-space: pre-line; max-width: 360px; z-index: 10; }
 
 /* этажи SVG-карты: выше выбранного скрыты, ниже — приглушены */
 .floor-hidden { display: none; }

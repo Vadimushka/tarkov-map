@@ -1,0 +1,11 @@
+{
+  "data": {
+    "i_flash Name": "Защищённая флешка",
+    "i_flash ShortName": "Флешка",
+    "i_led Name": "Транспортир LEDX",
+    "i_led ShortName": "LEDX",
+    "i_key Name": "Ключ от КПП",
+    "i_key ShortName": "КПП",
+    "MOD_STOCK": "Приклад"
+  }
+}

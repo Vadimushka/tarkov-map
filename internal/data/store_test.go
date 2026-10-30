@@ -16,6 +16,7 @@ type fakeServer struct {
 	*httptest.Server
 	hits     atomic.Int32
 	svgMain  bool // отдавать ли SVG по основному адресу
+	noItems  bool // 404 на items_ru
 	fallback string
 	fail     atomic.Bool   // отвечать 500 на всё
 	hang     chan struct{} // не nil — запросы висят, пока канал не закрыт
@@ -28,6 +29,7 @@ func newServer(t *testing.T) *fakeServer {
 	files := map[string]string{
 		"/pve/maps":            "testdata/pve_maps.json",
 		"/pve/maps_ru":         "testdata/pve_maps_ru.json",
+		"/pve/items_ru":        "testdata/pve_items_ru.json",
 		"/maps.json":           "testdata/maps.json",
 		"/svg/Interchange.svg": "testdata/Interchange.svg",
 		"/fb/Interchange.svg":  "testdata/Interchange.svg",
@@ -39,7 +41,7 @@ func newServer(t *testing.T) *fakeServer {
 			http.Error(w, "fail", http.StatusInternalServerError)
 			return
 		}
-		if r.URL.Path == "/svg/Interchange.svg" && !fs.svgMain {
+		if (r.URL.Path == "/svg/Interchange.svg" && !fs.svgMain) || (r.URL.Path == "/pve/items_ru" && fs.noItems) {
 			http.NotFound(w, r)
 			return
 		}

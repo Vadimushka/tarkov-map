@@ -1,6 +1,8 @@
 package data
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
@@ -170,4 +172,33 @@ func fillContent(gm *GameMap, rc rawContent, refs rawRefs, tr func(string) strin
 		}
 		gm.Bosses = append(gm.Bosses, boss)
 	}
+}
+
+// ItemName — название предмета по-русски: полное и краткое.
+type ItemName struct{ Name, Short string }
+
+// parseItems читает items_ru: ключи "<id> Name" и "<id> ShortName". Нет файла или он
+// битый — пустой словарь: названия предметов необязательны.
+func parseItems(file string) map[string]ItemName {
+	out := map[string]ItemName{}
+	var raw struct {
+		Data map[string]any `json:"data"`
+	}
+	b, err := os.ReadFile(file)
+	if err != nil || json.Unmarshal(b, &raw) != nil {
+		return out
+	}
+	for k, v := range raw.Data {
+		text, _ := v.(string)
+		if id, ok := strings.CutSuffix(k, " Name"); ok {
+			n := out[id]
+			n.Name = text
+			out[id] = n
+		} else if id, ok := strings.CutSuffix(k, " ShortName"); ok {
+			n := out[id]
+			n.Short = text
+			out[id] = n
+		}
+	}
+	return out
 }

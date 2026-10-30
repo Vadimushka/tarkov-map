@@ -69,7 +69,10 @@ type Store struct {
 	byScene map[string]GameMap
 	defs    map[string]mapgeo.MapDef
 	labels  map[string][]Label
+	items   map[string]ItemName
 	updated time.Time
+
+	itemsFailed map[string]bool // режимы, для которых items_ru не скачался в этом запуске (под mu)
 
 	fileLocks  sync.Map // путь файла → *sync.Mutex закачки
 	svgRefresh sync.Map // путь SVG → идёт фоновое обновление
@@ -96,6 +99,12 @@ func (s *Store) files(mode string) []remoteFile {
 	}
 }
 
+// itemsFile — названия предметов. Файл необязателен и в files не входит: без него
+// карта работает, недоступен только поиск лута.
+func (s *Store) itemsFile(mode string) remoteFile {
+	return remoteFile{s.JSONBase + "/" + mode + "/items_ru", mode + "_items_ru.json"}
+}
+
 // Load обновляет кэш режима ("pve" | "regular"), если он старше суток или force,
 // и разбирает данные. Без сети работает на кэше; без сети и без кэша — ErrNoData.
 func (s *Store) Load(mode string, force bool) error {
@@ -104,6 +113,8 @@ func (s *Store) Load(mode string, force bool) error {
 			return err
 		}
 	}
+	it := s.itemsFile(mode)
+	_ = s.ensure(it.url, it.name, force)
 	return s.parse(mode)
 }
 
@@ -117,7 +128,9 @@ func (s *Store) LoadCached(mode string) error {
 	return s.parse(mode)
 }
 
-// Stale — какого-то файла режима нет или он старше суток.
+// Stale — какого-то файла режима нет или он старше суток. Названия предметов учитываются,
+// только пока их не пытались скачать в этом запуске: иначе при недоступном items_ru каждая
+// загрузка карты заново качала бы все файлы режима.
 func (s *Store) Stale(mode string) bool {
 	for _, f := range s.files(mode) {
 		st, err := os.Stat(filepath.Join(s.dir, f.name))
@@ -125,17 +138,33 @@ func (s *Store) Stale(mode string) bool {
 			return true
 		}
 	}
-	return false
+	s.mu.RLock()
+	failed := s.itemsFailed[mode]
+	s.mu.RUnlock()
+	if failed {
+		return false
+	}
+	st, err := os.Stat(filepath.Join(s.dir, s.itemsFile(mode).name))
+	return err != nil || s.now().Sub(st.ModTime()) >= ttl
 }
 
 // Fetch скачивает файлы режима, не трогая данные в памяти. Ошибка — сеть не ответила;
-// уже лежащие файлы при этом остаются прежними.
+// уже лежащие файлы при этом остаются прежними. Неудача с названиями предметов ошибкой
+// не считается, а только запоминается (см. Stale).
 func (s *Store) Fetch(mode string) error {
 	for _, f := range s.files(mode) {
 		if err := s.download(f.url, filepath.Join(s.dir, f.name)); err != nil {
 			return fmt.Errorf("%s: %w", f.name, err)
 		}
 	}
+	it := s.itemsFile(mode)
+	failed := s.download(it.url, filepath.Join(s.dir, it.name)) != nil
+	s.mu.Lock()
+	if s.itemsFailed == nil {
+		s.itemsFailed = map[string]bool{}
+	}
+	s.itemsFailed[mode] = failed
+	s.mu.Unlock()
 	return nil
 }
 
@@ -148,12 +177,13 @@ func (s *Store) parse(mode string) error {
 	if err != nil {
 		return fmt.Errorf("%s_maps: %w", mode, err)
 	}
+	items := parseItems(filepath.Join(s.dir, s.itemsFile(mode).name))
 	var updated time.Time
 	if st, err := os.Stat(filepath.Join(s.dir, mode+"_maps.json")); err == nil {
 		updated = st.ModTime()
 	}
 	s.mu.Lock()
-	s.defs, s.labels, s.byScene, s.updated = defs, labels, maps, updated
+	s.defs, s.labels, s.items, s.byScene, s.updated = defs, labels, items, maps, updated
 	s.mu.Unlock()
 	return nil
 }
@@ -209,6 +239,14 @@ func (s *Store) MapByScene(scenePath string) (GameMap, bool) {
 	defer s.mu.RUnlock()
 	m, ok := s.byScene[scenePath]
 	return m, ok
+}
+
+// ItemName — название предмета по id; false — нет такого или нет файла названий.
+func (s *Store) ItemName(id string) (ItemName, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	n, ok := s.items[id]
+	return n, ok
 }
 
 // MapDef возвращает параметры SVG-карты; false — карта без SVG.

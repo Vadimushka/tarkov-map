@@ -80,6 +80,25 @@ window.TMap = (() => {
   });
   content.addEventListener("mouseleave", () => (tip.style.display = "none"));
 
+  // значки tarkov.dev (MIT, the-hideout/tarkov-dev): 24 px на экране при любом масштабе, как у них
+  const ICON = 24;
+  const CONTAINER_ICON = {
+    "bank-cash-register": "cash-register", "cash-register-tar2-2": "cash-register", "bank-safe": "safe",
+    "civilian-body": "dead-scav", "dead-civilian": "dead-scav", "lab-technician-body": "dead-scav",
+    "pmc-body": "dead-scav", "scav-body": "dead-scav", "shturmans-stash": "weapon-box",
+    "medical-supply-crate": "crate", "ration-supply-crate": "crate", "technical-supply-crate": "crate",
+  };
+  const KNOWN = new Set(["buried-barrel-cache", "cash-register", "crate", "dead-scav", "drawer", "duffle-bag",
+    "festive-airdrop-supply-crate", "grenade-box", "ground-cache", "jacket", "medbag", "medcase", "pc-block",
+    "plastic-suitcase", "safe", "toolbox", "weapon-box", "wooden-ammo-box", "wooden-crate"]);
+  function containerIcon(type) {
+    const n = CONTAINER_ICON[type] || type;
+    return KNOWN.has(n) ? "container_" + n : null;
+  }
+  function icon(name, parent) {
+    return el("image", { href: "icons/" + name + ".png", x: -ICON / 2, y: -ICON / 2, width: ICON, height: ICON }, parent);
+  }
+
   function cpin(L, x, y, layer, tipFn) {
     const p = { g: el("g", { "data-layer": layer }, L.g), x, y };
     L.pins.push(p);
@@ -129,35 +148,32 @@ window.TMap = (() => {
       const color = css("--" + key.replace("_", "-")) || css("--c-misc");
       for (const c of data.Containers) {
         if ("c_" + c.Group !== key) continue;
-        el("circle", { r: 3.5, fill: color, stroke: "rgba(0,0,0,.8)", "stroke-width": 1 }, cpin(L, c.PX, c.PY, c.Layer, () => c.Name));
+        const g = cpin(L, c.PX, c.PY, c.Layer, () => c.Name), ic = containerIcon(c.Type);
+        if (ic) icon(ic, g);
+        else el("circle", { r: 5, fill: color, stroke: "rgba(0,0,0,.8)", "stroke-width": 1 }, g);
       }
     } else if (key === "loot_all" || key === "loot_hit") {
       const hit = key === "loot_hit";
-      const color = css(hit ? "--loot-hit" : "--loot");
+      const color = css("--loot-hit");
       data.Loot.forEach((pt, i) => {
         if (hit !== !!(lootHits && lootHits.has(i))) return;
-        el("circle", hit ? { r: 5, fill: color, stroke: "#000", "stroke-width": 1.2 } : { r: 2.5, fill: color, stroke: "rgba(0,0,0,.6)", "stroke-width": 0.8 },
-          cpin(L, pt.PX, pt.PY, pt.Layer, () => lootTip(pt)));
+        const g = cpin(L, pt.PX, pt.PY, pt.Layer, () => lootTip(pt));
+        if (hit) el("circle", { r: ICON / 2 + 3, fill: "none", stroke: color, "stroke-width": 3 }, g);
+        icon("loose_loot", g);
       });
     } else if (key === "locks") {
-      const color = css("--lock");
       for (const l of data.Locks) {
         const text = [LOCK[l.Kind] || "Замок", l.Key ? "ключ: " + l.Key : "ключ неизвестен"];
         if (l.NeedsPower) text.push("нужно питание");
-        el("rect", { x: -4, y: -4, width: 8, height: 8, rx: 1.5, fill: color, stroke: "#000", "stroke-width": 1 },
-          cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · ")));
+        icon("lock", cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · ")));
       }
     } else if (key === "switches") {
-      const color = css("--switch");
-      for (const s of data.Switches) el("circle", { r: 4.5, fill: color, stroke: "#000", "stroke-width": 1 }, cpin(L, s.PX, s.PY, s.Layer, () => s.Name));
+      for (const s of data.Switches) icon("switch", cpin(L, s.PX, s.PY, s.Layer, () => s.Name));
     } else if (key === "weapons") {
-      const color = css("--mg");
-      for (const w of data.Weapons) el("path", { d: "M0,-6 L5.5,4 L-5.5,4 Z", fill: color, stroke: "#000", "stroke-width": 1 }, cpin(L, w.PX, w.PY, w.Layer, () => w.Name));
+      for (const w of data.Weapons) icon("stationarygun", cpin(L, w.PX, w.PY, w.Layer, () => w.Name));
     } else if (key === "bosses") {
-      const color = css("--boss");
       for (const b of data.Bosses) {
-        el("path", { d: "M0,-7 L7,0 L0,7 L-7,0 Z", fill: color, stroke: "#fff", "stroke-width": 1.5 },
-          cpin(L, b.PX, b.PY, b.Layer, () => `${b.Name} · появляется в ${pct(b.Chance)} рейдов · это место — ${pct(b.SpotChance)}`));
+        icon("spawn_boss", cpin(L, b.PX, b.PY, b.Layer, () => `${b.Name} · появляется в ${pct(b.Chance)} рейдов · это место — ${pct(b.SpotChance)}`));
       }
     } else if (key === "hazards") {
       for (const h of data.Hazards) {
@@ -170,7 +186,7 @@ window.TMap = (() => {
           }, L.g);
           tipOf.set(poly, text);
         } else {
-          el("circle", { r: 6, fill: color, "fill-opacity": 0.5, stroke: color, "stroke-width": 1.5 }, cpin(L, h.PX, h.PY, h.Layer, text));
+          icon("hazard", cpin(L, h.PX, h.PY, h.Layer, text));
         }
       }
     }

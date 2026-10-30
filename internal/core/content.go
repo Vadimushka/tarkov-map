@@ -18,7 +18,7 @@ type PlacePt struct {
 
 type ContainerPt struct {
 	Pt
-	Group, Name string
+	Group, Type, Name string
 }
 
 type LootPt struct {
@@ -93,7 +93,7 @@ func (c *Core) Content() MapContent {
 		m.Places = append(m.Places, PlacePt{Pt: Pt{PX: px, PY: py, Layer: layer}, Text: l.Text})
 	}
 	for _, ct := range g.gm.Containers {
-		m.Containers = append(m.Containers, ContainerPt{Pt: at(ct.Pos), Group: ct.Group, Name: ct.Name})
+		m.Containers = append(m.Containers, ContainerPt{Pt: at(ct.Pos), Group: ct.Group, Type: ct.Type, Name: ct.Name})
 	}
 	for _, l := range g.gm.Loose {
 		m.Loot = append(m.Loot, LootPt{Pt: at(l.Pos), Items: l.Items})

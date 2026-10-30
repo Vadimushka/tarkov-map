@@ -15,7 +15,7 @@ func TestContentProjectsAndResolves(t *testing.T) {
 	m := c.Content()
 	px, py := mapgeo.Project(ic, 10, 20)
 	if len(m.Containers) != 1 || m.Containers[0].PX != px || m.Containers[0].PY != py ||
-		m.Containers[0].Group != "weapon" || m.Containers[0].Layer != "Ground_Level" {
+		m.Containers[0].Group != "weapon" || m.Containers[0].Type != "weapon-box" || m.Containers[0].Layer != "Ground_Level" {
 		t.Errorf("Containers = %+v", m.Containers)
 	}
 	if len(m.Loot) != 1 || m.Loot[0].Layer != "First_Floor" {

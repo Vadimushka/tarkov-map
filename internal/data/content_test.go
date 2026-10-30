@@ -12,7 +12,7 @@ import (
 func TestLoadMapContent(t *testing.T) {
 	s, _, _, _ := loaded(t)
 	m, _ := s.MapByScene("maps/shopping_mall.bundle")
-	if len(m.Containers) != 2 || m.Containers[0] != (Container{Group: "weapon", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}) {
+	if len(m.Containers) != 2 || m.Containers[0] != (Container{Group: "weapon", Type: "weapon-box", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}) {
 		t.Fatalf("Containers = %+v", m.Containers)
 	}
 	if m.Containers[1].Group != "misc" || m.Containers[1].Name != "Таинственный ящик" {

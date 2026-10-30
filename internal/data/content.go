@@ -8,10 +8,11 @@ import (
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
 )
 
-// Container — контейнер с лутом. Group: weapon | med | tech | safe | cache | body | misc.
+// Container — контейнер с лутом. Group: weapon | med | tech | safe | cache | body | misc;
+// Type — normalizedName типа контейнера (по нему выбирается значок), пусто для незнакомого.
 type Container struct {
-	Group, Name string
-	Pos         mapgeo.Vec3
+	Group, Type, Name string
+	Pos               mapgeo.Vec3
 }
 
 // Loose — точка, где на земле может появиться лут; Items — id предметов.
@@ -131,11 +132,11 @@ type rawContent struct {
 // fillContent переносит метки карты в gm, переводя названия через tr.
 func fillContent(gm *GameMap, rc rawContent, refs rawRefs, tr func(string) string) {
 	for _, c := range rc.LootContainers {
-		name, group := c.LootContainer, "misc"
+		name, group, typ := c.LootContainer, "misc", ""
 		if r, ok := refs.LootContainers[c.LootContainer]; ok {
-			name, group = tr(r.Name), containerGroup(r.NormalizedName)
+			name, group, typ = tr(r.Name), containerGroup(r.NormalizedName), r.NormalizedName
 		}
-		gm.Containers = append(gm.Containers, Container{Group: group, Name: name, Pos: c.Position})
+		gm.Containers = append(gm.Containers, Container{Group: group, Type: typ, Name: name, Pos: c.Position})
 	}
 	for _, l := range rc.LootLoose {
 		gm.Loose = append(gm.Loose, Loose{Pos: l.Position, Items: l.Items})

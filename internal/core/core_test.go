@@ -26,7 +26,7 @@ func (fakeSrc) MapByScene(scene string) (data.GameMap, bool) {
 		return data.GameMap{NormalizedName: "interchange", Name: "Развязка", ScenePath: scene,
 			Extracts:   []data.Extract{{Name: "Безопасная комната", Faction: "pmc", Pos: mapgeo.Vec3{X: -48, Y: 23, Z: 44}}},
 			Transits:   []data.Transit{{Name: "Переход на Таможню", Pos: mapgeo.Vec3{X: 280, Y: 20, Z: 435}}},
-			Containers: []data.Container{{Group: "weapon", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}},
+			Containers: []data.Container{{Group: "weapon", Type: "weapon-box", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}},
 			Loose:      []data.Loose{{Pos: mapgeo.Vec3{X: 0, Y: 30, Z: 0}, Items: []string{"i_led", "i_unknown"}}},
 			Locks:      []data.Lock{{Kind: "door", KeyID: "i_key", Pos: mapgeo.Vec3{X: 3, Y: 1, Z: 4}}},
 			Hazards: []data.Hazard{{Kind: "minefield", Pos: mapgeo.Vec3{X: 7, Y: 1, Z: 8},

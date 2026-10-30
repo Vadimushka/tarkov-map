@@ -3,7 +3,7 @@
   --pmc: #7bd88f; --scav: #f0a04b; --shared: #5fb3f0; --transit: #c58af9; --route: #ff5d5d;
   /* вкладка «Лут и места» */
   --c-weapon: #d98c5f; --c-med: #ef6f9a; --c-tech: #8fa8ff; --c-safe: #f5f0e1; --c-cache: #a3b86c; --c-body: #b0a8a0; --c-misc: #8c7b65;
-  --loot: #9a9488; --loot-hit: #ffe14d; --lock: #e0c27a; --switch: #ffd23f; --mg: #ff8a3d; --boss: #ff3b3b;
+  --loot-hit: #ffe14d;
   --hazard: #ff6b4a; --sniper: #ffaa00; --place: #cfc8b4;
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
@@ -31,6 +31,7 @@ body { display: flex; flex-direction: column; }
 .items .row { display: flex; gap: 6px; }
 .caption { text-align: center; color: var(--muted); font-size: 11px; padding-top: 3px; white-space: nowrap; }
 .group label { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+.ico { width: 14px; height: 14px; flex: none; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .sw.trail { border-radius: 0; height: 0; border-top: 2px dashed var(--route); }
 .sw.txt { width: auto; height: auto; border-radius: 0; font-size: 10px; line-height: 1; color: var(--muted); }

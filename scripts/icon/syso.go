@@ -9,6 +9,8 @@ type res struct {
 
 // iconSyso собирает COFF-объект для go build (GOOS=windows подхватывает *.syso пакета сам):
 // RT_ICON 1…N с PNG-картинками и RT_GROUP_ICON groupID, который на них ссылается.
+// Форматы: https://learn.microsoft.com/windows/win32/debug/pe-format (COFF, раздел .rsrc)
+// и https://learn.microsoft.com/windows/win32/menurc/newheader (заголовок группы иконок).
 func iconSyso(groupID uint16, sizes []int, pngs [][]byte) []byte {
 	le := binary.LittleEndian
 	grp := le.AppendUint16(nil, 0)

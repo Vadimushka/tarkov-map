@@ -149,3 +149,17 @@ func TestTailerNoLogsDir(t *testing.T) {
 		t.Errorf("события: %v", kinds(s.evs))
 	}
 }
+
+// Скобки в пути к игре — не шаблон: «D:\Games [EFT]\Logs» читается как есть.
+func TestTailerBracketsInPath(t *testing.T) {
+	logs := filepath.Join(t.TempDir(), "Games [EFT]", "Logs")
+	mkSession(t, logs, "log_a", time.Now().Add(-time.Hour), lMode+"\n"+lMap+"\n")
+	s := &sink{}
+	tl := NewTailer(logs, s.add)
+	if err := tl.Poll(); err != nil {
+		t.Fatal(err)
+	}
+	if k := kinds(s.take()); len(k) != 2 {
+		t.Errorf("события = %v, want [EvMode EvMap]", k)
+	}
+}

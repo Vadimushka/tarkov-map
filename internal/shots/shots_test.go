@@ -1,6 +1,7 @@
 package shots
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,5 +106,37 @@ func TestWatcherCreateThenDelete(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("скрин, удалённый сразу после создания, потерян")
+	}
+}
+
+// Игра создаёт папку Screenshots при первом скрине: до этого следить не за чем,
+// но и ошибкой это не считается — скрины подхватятся, как только папка появится.
+func TestWatcherWaitsForDir(t *testing.T) {
+	old := retryEvery
+	retryEvery = 20 * time.Millisecond
+	t.Cleanup(func() { retryEvery = old })
+	dir := filepath.Join(t.TempDir(), "Screenshots")
+	got := make(chan string, 10)
+	w, err := NewWatcher(dir, func(name string, at time.Time) { got <- name })
+	if err != nil {
+		t.Fatalf("NewWatcher без папки: %v", err)
+	}
+	t.Cleanup(func() { w.Close() })
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for i := 0; ; i++ {
+		// папку подхватывают по таймеру — пишем скрины, пока не заметят
+		name := fmt.Sprintf("2026-10-30[21-00]_%d.png", i)
+		os.WriteFile(filepath.Join(dir, name), nil, 0o644)
+		select {
+		case <-got:
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("скрин в появившейся папке не замечен")
+		}
 	}
 }

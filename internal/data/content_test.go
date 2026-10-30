@@ -1,6 +1,9 @@
 package data
 
 import (
+	"bytes"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -108,5 +111,20 @@ func TestStaleWantsItemsFileOnce(t *testing.T) {
 	}
 	if s.Stale("pve") {
 		t.Error("после неудачной попытки items_ru до конца запуска не устаревает")
+	}
+}
+
+// Битый файл названий не ломает карту, но причина «нет названий» видна в логе.
+func TestBrokenItemsLogged(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	f := filepath.Join(t.TempDir(), "pve_items_ru.json")
+	os.WriteFile(f, []byte(`{"data": {"i_flash Name": "Флешка"`), 0o644)
+	if n := len(parseItems(f)); n != 0 {
+		t.Errorf("из битого файла разобрано %d названий", n)
+	}
+	if !strings.Contains(buf.String(), "pve_items_ru.json") {
+		t.Errorf("битый файл названий не попал в лог: %q", buf.String())
 	}
 }

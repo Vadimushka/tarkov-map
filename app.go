@@ -52,6 +52,7 @@ type App struct {
 	dirty             bool
 
 	tmu     sync.Mutex // tailer и watcher
+	smu     sync.Mutex // запись settings.json
 	tailer  *gamelog.Tailer
 	watcher *shots.Watcher
 
@@ -383,6 +384,8 @@ func (a *App) GetDataUpdated() time.Time {
 }
 
 func (a *App) updateSettings(fn func(*settings.Settings)) error {
+	a.smu.Lock() // правка и запись — одна за другой, иначе старая версия может записаться последней
+	defer a.smu.Unlock()
 	a.mu.Lock()
 	fn(&a.set)
 	s := a.set

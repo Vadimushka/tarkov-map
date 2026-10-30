@@ -57,7 +57,14 @@ func (t *Tailer) Poll() error {
 		t.session = session
 		t.offsets = map[string]int64{}
 	}
-	files, _ := filepath.Glob(filepath.Join(session, "*application_*.log"))
+	// не filepath.Glob: скобки в пути к игре он принял бы за шаблон
+	var files []string
+	entries, _ := os.ReadDir(session)
+	for _, e := range entries {
+		if ok, _ := filepath.Match("*application_*.log", e.Name()); ok && !e.IsDir() {
+			files = append(files, filepath.Join(session, e.Name()))
+		}
+	}
 	sort.Strings(files)
 	for _, f := range files {
 		t.readFile(f)

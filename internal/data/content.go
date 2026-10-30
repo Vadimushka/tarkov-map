@@ -2,7 +2,9 @@ package data
 
 import (
 	"encoding/json"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Vadimushka/tarkov-map/internal/mapgeo"
@@ -186,7 +188,11 @@ func parseItems(file string) map[string]ItemName {
 		Data map[string]any `json:"data"`
 	}
 	b, err := os.ReadFile(file)
-	if err != nil || json.Unmarshal(b, &raw) != nil {
+	if err != nil {
+		return out // файла нет — обычное дело, поиск просто недоступен
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		log.Printf("названия предметов %s: %v", filepath.Base(file), err)
 		return out
 	}
 	for k, v := range raw.Data {

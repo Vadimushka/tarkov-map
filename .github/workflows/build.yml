@@ -1,0 +1,74 @@
+# Тесты и сборка TarkovMap.exe на каждый push; тег v* (git tag v0.2.0 && git push origin v0.2.0)
+# ещё и выпускает релиз с exe. Данные карт — из assets/data.zip в репозитории.
+name: Сборка
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-linux:
+    name: Тесты (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Форматирование
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  # слежение за папкой скриншотов, пути с [ ], положение окна — только на настоящей Windows
+  test-windows:
+    name: Тесты (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+
+  build:
+    name: Сборка exe
+    needs: [test-linux, test-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # релиз по тегу
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # прошлый тег — для списка изменений
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Собрать
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then export VERSION="$GITHUB_REF_NAME"; else export VERSION="dev-${GITHUB_SHA::7}"; fi
+          scripts/build.sh
+          cd build/bin && sha256sum TarkovMap.exe > TarkovMap.exe.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: TarkovMap-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          path: build/bin/TarkovMap.exe*
+          retention-days: 3 # бесплатно 500 МБ на все артефакты
+      - name: Релиз
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release-notes.sh "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" build/bin/TarkovMap.exe build/bin/TarkovMap.exe.sha256 \
+            --title "Tarkov Map $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

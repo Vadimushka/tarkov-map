@@ -19,6 +19,9 @@ var assets embed.FS
 //go:embed assets/data.zip
 var seedZip []byte
 
+// version — версия сборки; scripts/build.sh подставляет её через -ldflags "-X main.version=…".
+var version = "dev"
+
 func main() {
 	// Флаги для смоук-теста; в настройки не сохраняются.
 	game := flag.String("game", "", "папка игры (где лежит Logs)")

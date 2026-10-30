@@ -356,6 +356,11 @@ func (a *App) GetDataUpdated() time.Time {
 	return a.store.Updated()
 }
 
+// GetVersion — версия программы для «О программе».
+func (a *App) GetVersion() string {
+	return version
+}
+
 func (a *App) updateSettings(fn func(*settings.Settings)) error {
 	a.smu.Lock() // правка и запись — одна за другой, иначе старая версия может записаться последней
 	defer a.smu.Unlock()

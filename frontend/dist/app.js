@@ -413,6 +413,7 @@
 
   // --- запуск ---
   window.addEventListener("load", async () => {
+    go().GetVersion().then((v) => ($("#version").textContent = "Tarkov Map " + v)).catch(console.error);
     try {
       const st = await go().GetSettings();
       side = st.Side === "scav" ? "scav" : "pmc";

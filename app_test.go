@@ -63,3 +63,13 @@ func TestSeedZipComplete(t *testing.T) {
 		}
 	}
 }
+
+// Версию подставляет сборка (-ldflags "-X main.version=…"); «О программе» показывает её.
+func TestGetVersion(t *testing.T) {
+	old := version
+	version = "v1.2.3"
+	t.Cleanup(func() { version = old })
+	if got := (&App{}).GetVersion(); got != "v1.2.3" {
+		t.Errorf("GetVersion() = %q", got)
+	}
+}

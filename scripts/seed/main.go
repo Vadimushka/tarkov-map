@@ -9,6 +9,7 @@ package main
 import (
 	"archive/zip"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -22,35 +23,45 @@ import (
 func main() {
 	out := flag.String("o", "assets/data.zip", "куда записать снимок")
 	flag.Parse()
+	if err := run(*out); err != nil {
+		log.Fatal(err)
+	}
+	st, _ := os.Stat(*out)
+	log.Printf("%s: %d КБ", *out, st.Size()/1024)
+}
+
+// run собирает снимок; прежний zip заменяется, только если новый собран и проверен целиком.
+func run(out string) error {
 	dir, err := os.MkdirTemp("", "tarkov-seed-")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer os.RemoveAll(dir)
 
 	s := data.NewStore(dir, &http.Client{Timeout: 2 * time.Minute}, time.Now)
 	for _, mode := range []string{"pve", "regular"} {
 		if err := s.Fetch(mode, true); err != nil {
-			log.Fatalf("%s: %v", mode, err)
+			return fmt.Errorf("%s: %w", mode, err)
 		}
 		// без названий предметов поиск лута у друга не заработает — снимок неполный
 		if _, err := os.Stat(filepath.Join(dir, mode+"_items_ru.json")); err != nil {
-			log.Fatalf("%s: названия предметов не скачались", mode)
+			return fmt.Errorf("%s: названия предметов не скачались", mode)
 		}
-	}
-	if err := s.LoadCached("pve"); err != nil {
-		log.Fatal(err)
+		if err := s.LoadCached(mode); err != nil { // скачанное разбирается
+			return fmt.Errorf("%s: %w", mode, err)
+		}
 	}
 	for _, d := range s.SVGDefs() {
 		if err := s.RefreshSVG(d); err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
-	if err := writeZip(dir, *out); err != nil {
-		log.Fatal(err)
+	tmp := out + ".tmp"
+	if err := writeZip(dir, tmp); err != nil {
+		os.Remove(tmp)
+		return err
 	}
-	st, _ := os.Stat(*out)
-	log.Printf("%s: %d КБ", *out, st.Size()/1024)
+	return os.Rename(tmp, out)
 }
 
 // writeZip пакует dir с путями через «/» и временем файлов: по нему Store решает,

@@ -1,6 +1,7 @@
 package data
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -34,7 +35,8 @@ func (y *Syncer) Use(mode string) error {
 			if y.failed[mode] {
 				return err
 			}
-			if ferr := y.store.Fetch(mode, false); ferr != nil {
+			// файлы есть, но не разбираются (сбой записи) — перекачать все, даже «свежие»
+			if ferr := y.store.Fetch(mode, !errors.Is(err, ErrNoData)); ferr != nil {
 				y.failed[mode] = true
 				return fmt.Errorf("%w (%v)", ErrNoData, ferr)
 			}

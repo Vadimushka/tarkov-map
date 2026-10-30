@@ -51,6 +51,8 @@ func NewWatcher(dir string, onShot func(name string, at time.Time)) (*Watcher, e
 			case <-retry:
 				if fw.Add(dir) == nil {
 					retry = nil
+					// игра создаёт папку вместе с первым скрином — Create для него уже не придёт
+					reportExisting(dir, onShot)
 				}
 			case ev, ok := <-fw.Events:
 				if !ok {
@@ -76,4 +78,17 @@ func (w *Watcher) Close() error {
 	err := w.fw.Close()
 	<-w.done
 	return err
+}
+
+// reportExisting сообщает о *.png, уже лежащих в папке; повторы отсеивает ядро по ключу скрина.
+func reportExisting(dir string, onShot func(name string, at time.Time)) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".png") {
+			continue
+		}
+		if info, err := e.Info(); err == nil {
+			onShot(e.Name(), info.ModTime())
+		}
+	}
 }

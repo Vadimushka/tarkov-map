@@ -140,3 +140,28 @@ func TestWatcherWaitsForDir(t *testing.T) {
 		}
 	}
 }
+
+// Игра создаёт папку вместе с первым скрином: события Create для него уже не будет,
+// но скрин всё равно должен дойти.
+func TestWatcherFirstShotInNewDir(t *testing.T) {
+	old := retryEvery
+	retryEvery = 20 * time.Millisecond
+	t.Cleanup(func() { retryEvery = old })
+	dir := filepath.Join(t.TempDir(), "Screenshots")
+	got := make(chan string, 10)
+	w, err := NewWatcher(dir, func(name string, at time.Time) { got <- name })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	os.Mkdir(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, real0), nil, 0o644)
+	select {
+	case name := <-got:
+		if name != real0 {
+			t.Errorf("скрин = %q", name)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("первый скрин в новой папке потерян")
+	}
+}

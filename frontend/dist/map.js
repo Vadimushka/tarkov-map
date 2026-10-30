@@ -245,17 +245,23 @@ window.TMap = (() => {
     return lootHits ? lootHits.size : 0;
   }
 
-  // cleanSVG убирает из скачанной карты всё исполняемое: скрипты, вставки HTML,
-  // обработчики on* и ссылки не на свои элементы и не на встроенные картинки.
-  // Карта приходит из сети, а у страницы есть доступ к методам приложения.
+  // cleanSVG оставляет от скачанной карты только рисунок. Карта приходит из сети, а у
+  // страницы есть доступ к методам приложения, поэтому белый список: только элементы
+  // SVG (HTML внутри — iframe, img — исполняется и без foreignObject), без скриптов и
+  // анимаций (set/animate умеют подменить href на javascript:), без обработчиков on*,
+  // ссылки — только на свои элементы и встроенные картинки.
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const BANNED = /^(script|foreignobject|set|animate|animatemotion|animatetransform|discard)$/i;
   function cleanSVG(root) {
-    root.querySelectorAll("script, foreignObject").forEach((n) => n.remove());
+    for (const n of [...root.querySelectorAll("*")]) {
+      if (n.namespaceURI !== SVG_NS || BANNED.test(n.localName)) n.remove();
+    }
     for (const n of [root, ...root.querySelectorAll("*")]) {
       for (const a of [...n.attributes]) {
         const name = a.name.toLowerCase(), v = a.value.trim().toLowerCase();
-        if (name.startsWith("on") || ((name === "href" || name.endsWith(":href")) && !v.startsWith("#") && !v.startsWith("data:image/"))) {
-          n.removeAttributeNode(a);
-        }
+        const href = name === "href" || name.endsWith(":href");
+        const ok = !href || v.startsWith("#") || (n.localName === "image" && /^data:image\/(png|jpeg|webp);/.test(v));
+        if (name.startsWith("on") || !ok) n.removeAttributeNode(a);
       }
     }
   }

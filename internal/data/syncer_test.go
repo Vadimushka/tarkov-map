@@ -2,6 +2,8 @@ package data
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -108,6 +110,23 @@ func TestSyncerRefreshKeepsCacheOnFailure(t *testing.T) {
 	}
 	if _, ok := s.MapByScene("maps/shopping_mall.bundle"); !ok {
 		t.Error("после неудачного Refresh данные пропали")
+	}
+	y.Wait()
+}
+
+// Свежий, но битый файл (сбой при записи): Use перекачивает всё, а не ждёт суток.
+func TestSyncerRepairsBrokenFreshCache(t *testing.T) {
+	_, fs, c, dir := loaded(t)
+	p := filepath.Join(dir, "pve_maps.json")
+	os.WriteFile(p, []byte(`{"data":`), 0o644)
+	os.Chtimes(p, c.t, c.t)
+	s := newStore(t, fs, c, dir)
+	y := NewSyncer(s, nil)
+	if err := y.Use("pve"); err != nil {
+		t.Fatalf("битый свежий кэш не восстановлен: %v", err)
+	}
+	if _, ok := s.MapByScene("maps/shopping_mall.bundle"); !ok {
+		t.Error("карта не разобрана после восстановления")
 	}
 	y.Wait()
 }

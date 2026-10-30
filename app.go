@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,6 +71,8 @@ func NewApp(flagGame, flagShots string) *App {
 	store := data.NewStore(cfgDir, &http.Client{Timeout: 30 * time.Second}, time.Now)
 	if zr, err := zip.NewReader(bytes.NewReader(seedZip), int64(len(seedZip))); err == nil {
 		store.Seed = zr
+	} else {
+		log.Printf("снимок данных не открылся, работаем без него: %v", err) // целость проверяет TestSeedZipComplete
 	}
 	a := &App{
 		flagGame: flagGame, flagShots: flagShots, cfgDir: cfgDir,

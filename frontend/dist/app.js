@@ -105,7 +105,48 @@
     content = null;
     contentKey = "";
     fillCounts(null);
+    $("#loot-found").textContent = "";
   }
+
+  // --- поиск лута на земле ---
+  const lootQ = $("#loot-q");
+  const LOOT_PH = lootQ.placeholder;
+  let lootTimer = 0;
+
+  // 1 точка, 3 точки, 5 точек, 11 точек, 21 точка
+  function points(n) {
+    const d = n % 10, dd = n % 100;
+    if (d === 1 && dd !== 11) return n + " точка";
+    if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + " точки";
+    return n + " точек";
+  }
+
+  // строка остаётся в поле, даже когда оно неактивно: появятся названия — поиск вернётся
+  function applyLootQuery() {
+    const q = lootQ.disabled ? "" : lootQ.value;
+    const n = TMap.setLootQuery(q);
+    let text = q.trim().length < 2 ? "" : n ? "найдено " + points(n) : "не найдено";
+    if (lootQ.disabled && lootQ.value.trim()) text = "нет названий предметов"; // placeholder закрыт строкой
+    $("#loot-found").textContent = text;
+  }
+
+  function saveLootQuery() {
+    go().SetLootQuery(lootQ.value).catch(console.error);
+  }
+
+  lootQ.addEventListener("input", () => {
+    clearTimeout(lootTimer);
+    lootTimer = setTimeout(() => {
+      applyLootQuery();
+      saveLootQuery();
+    }, 150);
+  });
+  $("#loot-clear").addEventListener("click", () => {
+    clearTimeout(lootTimer);
+    lootQ.value = "";
+    applyLootQuery();
+    saveLootQuery();
+  });
 
   // loadContent берёт метки, если сменилась карта или данные; false — ответ уже
   // устарел (карта сменилась между вызовами), вид надо перечитать
@@ -120,6 +161,9 @@
     contentKey = key;
     TMap.setContent(c);
     fillCounts(c);
+    lootQ.disabled = c.ItemsMissing;
+    lootQ.placeholder = c.ItemsMissing ? "Нет названий предметов — нажмите «Обновить данные»" : LOOT_PH;
+    applyLootQuery();
     return true;
   }
 
@@ -321,6 +365,7 @@
       // только известные ключи: устаревшие (например, прежний "route") отбрасываются
       const saved = st.Filters || {};
       for (const k in FILTER_DEFAULTS) filters[k] = k in saved ? !!saved[k] : FILTER_DEFAULTS[k];
+      lootQ.value = st.LootQuery || "";
     } catch (e) {
       console.error(e);
     }

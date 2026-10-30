@@ -83,9 +83,25 @@ window.TMap = (() => {
     return p.g;
   }
 
+  // поиск: без регистра, «ё» = «е», подстрока в полном или кратком названии, от 2 символов
+  const norm = (s) => (s || "").toLowerCase().replaceAll("ё", "е");
+  let lootQ = ""; // нормализованная строка поиска
+  const matches = (n) => lootQ.length >= 2 && (norm(n.Name).includes(lootQ) || norm(n.Short).includes(lootQ));
+
+  function matchLoot() {
+    lootHits = null;
+    if (!data || lootQ.length < 2) return;
+    const ids = new Set(Object.keys(data.Items).filter((id) => matches(data.Items[id])));
+    lootHits = new Set();
+    data.Loot.forEach((pt, i) => {
+      if (pt.Items.some((id) => ids.has(id))) lootHits.add(i);
+    });
+  }
+
   function lootTip(pt) {
     if (data.ItemsMissing) return "Может появиться:\nназвания предметов не загружены";
-    const names = pt.Items.filter((id) => data.Items[id]).map((id) => data.Items[id].Name);
+    const items = pt.Items.map((id) => data.Items[id]).filter(Boolean);
+    const names = [...items.filter(matches), ...items.filter((n) => !matches(n))].map((n) => n.Name);
     const lines = names.slice(0, 8);
     if (names.length > 8) lines.push(`ещё ${names.length - 8}`);
     return ["Может появиться:", ...lines].join("\n");
@@ -178,13 +194,25 @@ window.TMap = (() => {
 
   function setContent(c) {
     data = c;
+    matchLoot();
     resetContent();
     for (const k of LAYERS) if (layers[k].on) build(k);
   }
 
-  // setLootQuery подсвечивает точки лута с подходящим предметом; возвращает их число
+  // setLootQuery подсвечивает точки лута с подходящим предметом и возвращает их число.
+  // Совпавшие точки видны при любой строке поиска, даже без флажка «Все точки».
   function setLootQuery(q) {
-    return 0;
+    lootQ = norm(q.trim());
+    matchLoot();
+    for (const k of ["loot_all", "loot_hit"]) {
+      const L = layers[k];
+      L.g.replaceChildren();
+      L.pins = [];
+      L.built = false;
+    }
+    show("loot_hit", !!lootHits);
+    if (layers.loot_all.on) build("loot_all");
+    return lootHits ? lootHits.size : 0;
   }
 
   function setSVG(text, rect, layers) {

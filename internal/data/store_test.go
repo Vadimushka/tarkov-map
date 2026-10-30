@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -328,5 +329,13 @@ func TestMapsListsOnlySupported(t *testing.T) {
 	want := []MapRef{{Scene: "maps/shopping_mall.bundle", ID: "interchange", Name: "Развязка"}}
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Errorf("Maps() = %+v, want %+v — у Лаборатории нет SVG", got, want)
+	}
+}
+
+func TestSVGDefs(t *testing.T) {
+	s, _, _, _ := loaded(t)
+	defs := s.SVGDefs()
+	if len(defs) != 2 || path.Base(defs[0].SVGPath) != "Factory.svg" || path.Base(defs[1].SVGPath) != "Interchange.svg" {
+		t.Errorf("SVGDefs = %+v, want Factory.svg и Interchange.svg", defs)
 	}
 }

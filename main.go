@@ -13,6 +13,11 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// Снимок данных tarkov.dev (scripts/seed): с ним exe работает без сети с первого запуска.
+//
+//go:embed assets/data.zip
+var seedZip []byte
+
 func main() {
 	// Флаги для смоук-теста; в настройки не сохраняются.
 	game := flag.String("game", "", "папка игры (где лежит Logs)")

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -65,6 +67,9 @@ func NewApp(flagGame, flagShots string) *App {
 	}
 	cfgDir := filepath.Join(base, "TarkovMap")
 	store := data.NewStore(cfgDir, &http.Client{Timeout: 30 * time.Second}, time.Now)
+	if zr, err := zip.NewReader(bytes.NewReader(seedZip), int64(len(seedZip))); err == nil {
+		store.Seed = zr
+	}
 	a := &App{
 		flagGame: flagGame, flagShots: flagShots, cfgDir: cfgDir,
 		store: store, core: core.New(store),

@@ -336,6 +336,21 @@ func (s *Store) MapDef(normalizedName string) (mapgeo.MapDef, bool) {
 	return d, ok
 }
 
+// SVGDefs — все SVG-карты из maps.json, каждая один раз (для снимка данных).
+func (s *Store) SVGDefs() []mapgeo.MapDef {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	seen, out := map[string]bool{}, []mapgeo.MapDef{}
+	for _, d := range s.defs {
+		if !seen[d.SVGPath] {
+			seen[d.SVGPath] = true
+			out = append(out, d)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SVGPath < out[j].SVGPath })
+	return out
+}
+
 // Labels — подписи мест SVG-карты (варианты карт без своей SVG — по aliases).
 func (s *Store) Labels(normalizedName string) []Label {
 	if a, ok := aliases[normalizedName]; ok {

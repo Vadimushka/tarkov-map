@@ -3,7 +3,12 @@
   const go = () => window.go.main.App;
   const $ = (s) => document.querySelector(s);
 
-  const FILTER_DEFAULTS = { position: true, trail: false, extract_own: true, extract_shared: true, extract_other: false, transit: true, labels: true };
+  const FILTER_DEFAULTS = {
+    position: true, trail: false, extract_own: true, extract_shared: true, extract_other: false, transit: true, labels: true,
+    // вкладка «Лут и места»: по умолчанию только названия мест
+    places: true, c_weapon: false, c_med: false, c_tech: false, c_safe: false, c_cache: false, c_body: false, c_misc: false,
+    loot_all: false, locks: false, switches: false, hazards: false, weapons: false, bosses: false,
+  };
   const MODE = { pve: "PvE", regular: "PvP" };
 
   let side = "pmc";
@@ -12,6 +17,8 @@
   let view = null;
   let mapID = null;   // карта, чья подложка сейчас загружена
   let shotCount = 0;
+  let content = null;    // метки вкладки «Лут и места» (GetMapContent)
+  let contentKey = "";   // MapID#ContentGen загруженных меток
 
   function floorName(name) {
     if (!name) return "Основной";
@@ -75,6 +82,47 @@
     document.querySelectorAll("[name=floor]").forEach((r) => (r.checked = r.value === id));
   }
 
+  // --- метки вкладки «Лут и места» ---
+  function fillCounts(c) {
+    const n = {};
+    if (c) {
+      for (const x of c.Containers) n["c_" + x.Group] = (n["c_" + x.Group] || 0) + 1;
+      n.loot_all = c.Loot.length;
+      n.locks = c.Locks.length;
+      n.switches = c.Switches.length;
+      n.hazards = c.Hazards.length;
+      n.weapons = c.Weapons.length;
+      n.bosses = new Set(c.Bosses.map((b) => b.Name)).size;
+    }
+    document.querySelectorAll("[data-n]").forEach((s) => {
+      const v = c ? n[s.dataset.n] || 0 : null;
+      s.textContent = v === null ? "" : v;
+      s.closest("label").classList.toggle("empty", v === 0);
+    });
+  }
+
+  function dropContent() {
+    content = null;
+    contentKey = "";
+    fillCounts(null);
+  }
+
+  // loadContent берёт метки, если сменилась карта или данные; false — ответ уже
+  // устарел (карта сменилась между вызовами), вид надо перечитать
+  async function loadContent(v) {
+    const key = v.MapID + "#" + v.ContentGen;
+    if (key === contentKey) return true;
+    const c = await go().GetMapContent();
+    if (c.MapID !== v.MapID || c.Gen !== v.ContentGen) return false;
+    for (const k of ["Places", "Containers", "Loot", "Locks", "Switches", "Hazards", "Weapons", "Bosses"]) c[k] = c[k] || [];
+    c.Items = c.Items || {};
+    content = c;
+    contentKey = key;
+    TMap.setContent(c);
+    fillCounts(c);
+    return true;
+  }
+
   // --- вид карты ---
   let busy = false, again = false;
   async function loadView() {
@@ -98,6 +146,7 @@
       mapID = null;
       viewError = "";
       TMap.clear();
+      dropContent();
       showMessage();
       return;
     }
@@ -110,6 +159,7 @@
         mapID = null;
         viewError = "Не удалось загрузить карту: " + e;
         TMap.clear();
+        dropContent();
         showMessage();
         return;
       }
@@ -118,9 +168,14 @@
       shotCount = 0;
       $("#map").hidden = false;
       $("#msg").hidden = true;
-      TMap.setSVG(text, v.Rect, v.Layers);
+      TMap.setSVG(text, v.Rect, v.Layers); // сбрасывает и метки
+      dropContent();
       buildFloors(v.Layers);
       selectFloor(v.Layers.length ? v.Layers[0].ID : "");
+    }
+    if (!(await loadContent(v))) {
+      again = true;
+      return;
     }
     view = v;
     TMap.render(v, side);

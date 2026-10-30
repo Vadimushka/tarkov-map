@@ -9,6 +9,7 @@
 <header id="ribbon">
   <nav class="tabs" role="tablist" title="Двойной щелчок по вкладке — свернуть или развернуть ленту">
     <button class="tab" role="tab" data-tab="main">Главная</button>
+    <button class="tab" role="tab" data-tab="loot">Лут и места</button>
     <button class="tab" role="tab" data-tab="settings">Настройки</button>
     <span class="spacer"></span>
     <button id="collapse" class="tab" title="Свернуть ленту">˄</button>
@@ -47,6 +48,48 @@
         </div>
       </div>
       <div class="caption">Вид</div>
+    </section>
+  </div>
+
+  <div class="pane" data-pane="loot">
+    <section class="group">
+      <div class="items col">
+        <label><input type="checkbox" data-f="places"><span class="sw txt">Аа</span>Названия мест</label>
+      </div>
+      <div class="caption">Места</div>
+    </section>
+    <section class="group">
+      <div class="items grid">
+        <label><input type="checkbox" data-f="c_weapon"><span class="sw" style="background:var(--c-weapon)"></span>Оружейные<span class="n" data-n="c_weapon"></span></label>
+        <label><input type="checkbox" data-f="c_med"><span class="sw" style="background:var(--c-med)"></span>Медицина<span class="n" data-n="c_med"></span></label>
+        <label><input type="checkbox" data-f="c_tech"><span class="sw" style="background:var(--c-tech)"></span>Техника<span class="n" data-n="c_tech"></span></label>
+        <label><input type="checkbox" data-f="c_safe"><span class="sw" style="background:var(--c-safe)"></span>Сейфы и кассы<span class="n" data-n="c_safe"></span></label>
+        <label><input type="checkbox" data-f="c_cache"><span class="sw" style="background:var(--c-cache)"></span>Тайники<span class="n" data-n="c_cache"></span></label>
+        <label><input type="checkbox" data-f="c_body"><span class="sw" style="background:var(--c-body)"></span>Тела<span class="n" data-n="c_body"></span></label>
+        <label><input type="checkbox" data-f="c_misc"><span class="sw" style="background:var(--c-misc)"></span>Сумки и прочее<span class="n" data-n="c_misc"></span></label>
+      </div>
+      <div class="caption">Контейнеры</div>
+    </section>
+    <section class="group">
+      <div class="items col loot">
+        <div class="row">
+          <input id="loot-q" type="search" placeholder="Флешка, Ледокол…" title="Ищет только лут на земле; содержимое контейнеров неизвестно" spellcheck="false">
+          <button id="loot-clear" title="Очистить">×</button>
+          <span id="loot-found" class="muted"></span>
+        </div>
+        <label><input type="checkbox" data-f="loot_all"><span class="sw" style="background:var(--loot)"></span>Все точки<span class="n" data-n="loot_all"></span></label>
+      </div>
+      <div class="caption">Лут на земле</div>
+    </section>
+    <section class="group">
+      <div class="items grid">
+        <label><input type="checkbox" data-f="locks"><span class="sw" style="background:var(--lock)"></span>Замки<span class="n" data-n="locks"></span></label>
+        <label><input type="checkbox" data-f="switches"><span class="sw" style="background:var(--switch)"></span>Рубильники<span class="n" data-n="switches"></span></label>
+        <label><input type="checkbox" data-f="hazards"><span class="sw" style="background:var(--hazard)"></span>Опасные зоны<span class="n" data-n="hazards"></span></label>
+        <label><input type="checkbox" data-f="weapons"><span class="sw" style="background:var(--mg)"></span>Пулемёты<span class="n" data-n="weapons"></span></label>
+        <label><input type="checkbox" data-f="bosses"><span class="sw" style="background:var(--boss)"></span>Боссы<span class="n" data-n="bosses"></span></label>
+      </div>
+      <div class="caption">Прочее</div>
     </section>
   </div>
 

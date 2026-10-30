@@ -15,6 +15,7 @@ window.TMap = (() => {
 
   const base = el("g", {}, svg);
   const overlay = el("g", {}, svg);
+  const content = el("g", {}, overlay); // вкладка «Лут и места» — под выходами и маршрутом
   // порядок — снизу вверх: путь поверх выходов, текущее место поверх всего
   const groups = {};
   for (const k of ["transit", "extract_other", "extract_shared", "extract_own", "trail", "position"]) groups[k] = el("g", {}, overlay);
@@ -30,13 +31,14 @@ window.TMap = (() => {
 
   const FACTION = { pmc: "ЧВК", scav: "Дикие", shared: "Совместный" };
 
+  function showTip(ev, text) {
+    tip.style.display = "block";
+    tip.textContent = text;
+    tip.style.left = ev.clientX + 12 + "px";
+    tip.style.top = ev.clientY + 12 + "px";
+  }
   function hover(node, text) {
-    node.addEventListener("mousemove", (ev) => {
-      tip.style.display = "block";
-      tip.textContent = text;
-      tip.style.left = ev.clientX + 12 + "px";
-      tip.style.top = ev.clientY + 12 + "px";
-    });
+    node.addEventListener("mousemove", (ev) => showTip(ev, text));
     node.addEventListener("mouseleave", () => (tip.style.display = "none"));
   }
 
@@ -47,6 +49,142 @@ window.TMap = (() => {
     pins.push(p);
     place(p);
     return p.g;
+  }
+
+  // --- слои вкладки «Лут и места» ---
+  // Слой строится, только когда включён (на Улицах ≈2500 меток), и пересчитывается при
+  // масштабе, только пока виден (CSS-переменная масштаба на весь слой оказалась медленнее
+  // обхода атрибутов). Подсказки — одна пара обработчиков на все слои.
+  const LAYERS = ["hazards", "places", "c_misc", "c_body", "c_cache", "c_tech", "c_med", "c_safe", "c_weapon",
+    "loot_all", "locks", "switches", "weapons", "bosses", "loot_hit"];
+  const layers = {}; // ключ → {g, pins, built, on, upp}
+  for (const k of LAYERS) layers[k] = { g: el("g", { style: "display:none" }, content), pins: [], built: false, on: false, upp: 0 };
+  const tipOf = new WeakMap(); // метка → () => текст подсказки
+  let data = null;             // MapContent текущей карты
+  let lootHits = null;         // Set индексов совпавших точек лута; null — поиска нет
+
+  const LOCK = { door: "Дверь", trunk: "Багажник" };
+  const HAZARD = { minefield: "Минное поле", sniper: "Зона снайпера" };
+  const pct = (x) => Math.round(x * 100) + "%";
+
+  content.addEventListener("mousemove", (ev) => {
+    let n = ev.target;
+    while (n && n !== content && !tipOf.has(n)) n = n.parentNode;
+    if (n && n !== content) showTip(ev, tipOf.get(n)());
+    else tip.style.display = "none";
+  });
+  content.addEventListener("mouseleave", () => (tip.style.display = "none"));
+
+  function cpin(L, x, y, layer, tipFn) {
+    const p = { g: el("g", { "data-layer": layer }, L.g), x, y };
+    L.pins.push(p);
+    place(p);
+    if (tipFn) tipOf.set(p.g, tipFn);
+    return p.g;
+  }
+
+  function lootTip(pt) {
+    if (data.ItemsMissing) return "Может появиться:\nназвания предметов не загружены";
+    const names = pt.Items.filter((id) => data.Items[id]).map((id) => data.Items[id].Name);
+    const lines = names.slice(0, 8);
+    if (names.length > 8) lines.push(`ещё ${names.length - 8}`);
+    return ["Может появиться:", ...lines].join("\n");
+  }
+
+  function build(key) {
+    const L = layers[key];
+    L.g.replaceChildren();
+    L.pins = [];
+    L.built = true;
+    L.upp = upp;
+    if (!data || !R) return;
+    if (key === "places") {
+      for (const p of data.Places) {
+        const g = cpin(L, p.PX, p.PY, p.Layer);
+        g.classList.add("place");
+        el("text", { "text-anchor": "middle", y: 4 }, g).textContent = p.Text;
+      }
+    } else if (key.startsWith("c_")) {
+      const color = css("--" + key.replace("_", "-")) || css("--c-misc");
+      for (const c of data.Containers) {
+        if ("c_" + c.Group !== key) continue;
+        el("circle", { r: 3.5, fill: color, stroke: "rgba(0,0,0,.8)", "stroke-width": 1 }, cpin(L, c.PX, c.PY, c.Layer, () => c.Name));
+      }
+    } else if (key === "loot_all" || key === "loot_hit") {
+      const hit = key === "loot_hit";
+      const color = css(hit ? "--loot-hit" : "--loot");
+      data.Loot.forEach((pt, i) => {
+        if (hit !== !!(lootHits && lootHits.has(i))) return;
+        el("circle", hit ? { r: 5, fill: color, stroke: "#000", "stroke-width": 1.2 } : { r: 2.5, fill: color, stroke: "rgba(0,0,0,.6)", "stroke-width": 0.8 },
+          cpin(L, pt.PX, pt.PY, pt.Layer, () => lootTip(pt)));
+      });
+    } else if (key === "locks") {
+      const color = css("--lock");
+      for (const l of data.Locks) {
+        const text = [LOCK[l.Kind] || "Замок", l.Key ? "ключ: " + l.Key : "ключ неизвестен"];
+        if (l.NeedsPower) text.push("нужно питание");
+        el("rect", { x: -4, y: -4, width: 8, height: 8, rx: 1.5, fill: color, stroke: "#000", "stroke-width": 1 },
+          cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · ")));
+      }
+    } else if (key === "switches") {
+      const color = css("--switch");
+      for (const s of data.Switches) el("circle", { r: 4.5, fill: color, stroke: "#000", "stroke-width": 1 }, cpin(L, s.PX, s.PY, s.Layer, () => s.Name));
+    } else if (key === "weapons") {
+      const color = css("--mg");
+      for (const w of data.Weapons) el("path", { d: "M0,-6 L5.5,4 L-5.5,4 Z", fill: color, stroke: "#000", "stroke-width": 1 }, cpin(L, w.PX, w.PY, w.Layer, () => w.Name));
+    } else if (key === "bosses") {
+      const color = css("--boss");
+      for (const b of data.Bosses) {
+        el("path", { d: "M0,-7 L7,0 L0,7 L-7,0 Z", fill: color, stroke: "#fff", "stroke-width": 1.5 },
+          cpin(L, b.PX, b.PY, b.Layer, () => `${b.Name} · появляется в ${pct(b.Chance)} рейдов · это место — ${pct(b.SpotChance)}`));
+      }
+    } else if (key === "hazards") {
+      for (const h of data.Hazards) {
+        const color = css(h.Kind === "sniper" ? "--sniper" : "--hazard"), text = () => HAZARD[h.Kind] || "Опасная зона";
+        if (h.Outline.length >= 3) {
+          const poly = el("polygon", {
+            points: h.Outline.map((p) => p[0] + "," + p[1]).join(" "), "data-layer": h.Layer,
+            fill: color, "fill-opacity": 0.15, stroke: color, "stroke-width": 1.5, "stroke-dasharray": "5 4",
+            "vector-effect": "non-scaling-stroke",
+          }, L.g);
+          tipOf.set(poly, text);
+        } else {
+          el("circle", { r: 6, fill: color, "fill-opacity": 0.5, stroke: color, "stroke-width": 1.5 }, cpin(L, h.PX, h.PY, h.Layer, text));
+        }
+      }
+    }
+    dimNodes(L.g);
+  }
+
+  function show(key, on) {
+    const L = layers[key];
+    L.on = on;
+    if (on && !L.built) build(key);
+    else if (on && L.upp !== upp) {
+      L.pins.forEach(place);
+      L.upp = upp;
+    }
+    L.g.style.display = on ? "" : "none";
+  }
+
+  function resetContent() {
+    for (const k of LAYERS) {
+      const L = layers[k];
+      L.g.replaceChildren();
+      L.pins = [];
+      L.built = false;
+    }
+  }
+
+  function setContent(c) {
+    data = c;
+    resetContent();
+    for (const k of LAYERS) if (layers[k].on) build(k);
+  }
+
+  // setLootQuery подсвечивает точки лута с подходящим предметом; возвращает их число
+  function setLootQuery(q) {
+    return 0;
   }
 
   function setSVG(text, rect, layers) {
@@ -69,12 +207,16 @@ window.TMap = (() => {
     layerIds = new Set(layers.slice(1).map((l) => l.ID));
     floor = baseLayer;
     markers = [];
+    data = null;
+    resetContent();
     vb = null; // вписать после первой отрисовки меток
   }
 
   function clear() {
     base.replaceChildren();
     for (const k in groups) groups[k].replaceChildren();
+    data = null;
+    resetContent();
     R = null;
     vb = null;
     markers = [];
@@ -170,7 +312,7 @@ window.TMap = (() => {
       t.textContent = i + 1;
       hover(g, `#${i + 1} · ${s.Time}`);
     });
-    applyFloor();
+    for (const k in groups) dimNodes(groups[k]); // слои меток перерисовка вида не трогает
     if (!vb) fit();
   }
 
@@ -191,11 +333,21 @@ window.TMap = (() => {
       g.classList.toggle("floor-hidden", !base && !(own && g.id === floor));
       g.classList.toggle("floor-dim", base && own);
     });
-    overlay.querySelectorAll("[data-layer]").forEach((n) => (n.style.opacity = n.dataset.layer === floor ? 1 : 0.35));
+    dimNodes(overlay);
+  }
+
+  // метки чужого этажа приглушены; названия мест не приглушаются, а подпись не базового
+  // этажа видна только на своём — иначе магазины Развязки засыпали бы ТЦ на виде с земли
+  function dimNodes(root) {
+    root.querySelectorAll("[data-layer]").forEach((n) => {
+      if (n.classList.contains("place")) n.style.display = n.dataset.layer === baseLayer || n.dataset.layer === floor ? "" : "none";
+      else n.style.opacity = n.dataset.layer === floor ? 1 : 0.35;
+    });
   }
 
   function setFilter(key, on) {
     if (key === "labels") svg.classList.toggle("no-labels", !on);
+    else if (layers[key]) show(key, on);
     else if (groups[key]) groups[key].style.display = on ? "" : "none";
   }
 
@@ -212,6 +364,13 @@ window.TMap = (() => {
     if (u && u !== upp) {
       upp = u;
       pins.forEach(place);
+      for (const k of LAYERS) {
+        const L = layers[k];
+        if (L.on && L.built) {
+          L.pins.forEach(place);
+          L.upp = upp;
+        }
+      }
     }
   }
 
@@ -322,5 +481,5 @@ window.TMap = (() => {
     size = { w, h };
   }).observe(svg);
 
-  return { setSVG, clear, render, setFloor, setFilter, centerOn, keepInView, fit };
+  return { setSVG, clear, render, setContent, setLootQuery, setFloor, setFilter, centerOn, keepInView, fit };
 })();

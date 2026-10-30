@@ -106,6 +106,9 @@
     content = null;
     contentKey = "";
     fillCounts(null);
+    // поле выключают только метки карты без названий; нет меток — нет и причины
+    lootQ.disabled = false;
+    lootQ.placeholder = LOOT_PH;
     $("#loot-found").textContent = "";
   }
 
@@ -133,7 +136,8 @@
   // точки других этажей скрыты — сказать, сколько из найденных видно на этом
   function showLootFound() {
     const q = lootQ.disabled ? "" : lootQ.value;
-    let text = q.trim().length < 2 ? "" : lootN ? "найдено " + points(lootN) : "не найдено";
+    const found = lootN % 10 === 1 && lootN % 100 !== 11 ? "найдена " : "найдено "; // найдена 1 точка, найдено 3 точки
+    let text = q.trim().length < 2 ? "" : lootN ? found + points(lootN) : "не найдено";
     const off = text && lootN ? TMap.lootHitsElsewhere() : 0;
     if (off) text = `найдено ${lootN}, на этаже ${lootN - off}`;
     if (lootQ.disabled && lootQ.value.trim()) text = "нет названий предметов"; // placeholder закрыт строкой
@@ -177,11 +181,11 @@
     c.Items = c.Items || {};
     content = c;
     contentKey = key;
-    TMap.setContent(c);
-    fillCounts(c);
     lootQ.disabled = c.ItemsMissing;
     lootQ.placeholder = c.ItemsMissing ? "Нет названий предметов — нажмите «Обновить данные»" : LOOT_PH;
-    applyLootQuery();
+    lootN = TMap.setContent(c, lootQ.disabled ? "" : lootQ.value);
+    fillCounts(c);
+    showLootFound();
     return true;
   }
 
@@ -406,8 +410,9 @@
       res.textContent = "Ошибка: " + e;
     }
   });
-  $("#refresh-data").addEventListener("click", async () => {
-    const res = $("#settings-result");
+  $("#refresh-data").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget, res = $("#settings-result");
+    btn.disabled = true; // второе нажатие во время закачки только удвоило бы её
     res.textContent = "Обновляем…";
     try {
       await go().RefreshData();
@@ -416,6 +421,8 @@
       loadView();
     } catch (e) {
       res.textContent = String(e);
+    } finally {
+      btn.disabled = false;
     }
     updateStatus().catch(console.error);
   });

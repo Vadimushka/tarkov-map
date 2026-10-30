@@ -126,6 +126,7 @@ window.TMap = (() => {
     if (data.ItemsMissing) return "Может появиться:\nназвания предметов не загружены";
     const items = pt.Items.map((id) => data.Items[id]).filter(Boolean);
     const names = [...items.filter(matches), ...items.filter((n) => !matches(n))].map((n) => n.Name);
+    if (!names.length) return "Может появиться:\nназвания этих предметов неизвестны";
     const lines = names.slice(0, 8);
     if (names.length > 8) lines.push(`ещё ${names.length - 8}`);
     return ["Может появиться:", ...lines].join("\n");
@@ -133,6 +134,7 @@ window.TMap = (() => {
 
   function build(key) {
     const L = layers[key];
+    tip.style.display = "none"; // метка под курсором могла исчезнуть, а mousemove не придёт
     L.g.replaceChildren();
     L.pins = [];
     L.built = true;
@@ -213,11 +215,18 @@ window.TMap = (() => {
     }
   }
 
-  function setContent(c) {
+  // setContent ставит метки карты вместе со строкой поиска лута — так каждый слой
+  // строится один раз. Возвращает число совпавших точек лута.
+  function setContent(c, q) {
     data = c;
+    lootQ = norm(q.trim());
     matchLoot();
     resetContent();
-    for (const k of LAYERS) if (layers[k].on) build(k);
+    for (const k of LAYERS) {
+      if (k === "loot_hit") show(k, !!lootHits);
+      else if (layers[k].on) build(k);
+    }
+    return lootHits ? lootHits.size : 0;
   }
 
   // setLootQuery подсвечивает точки лута с подходящим предметом и возвращает их число.
@@ -236,6 +245,21 @@ window.TMap = (() => {
     return lootHits ? lootHits.size : 0;
   }
 
+  // cleanSVG убирает из скачанной карты всё исполняемое: скрипты, вставки HTML,
+  // обработчики on* и ссылки не на свои элементы и не на встроенные картинки.
+  // Карта приходит из сети, а у страницы есть доступ к методам приложения.
+  function cleanSVG(root) {
+    root.querySelectorAll("script, foreignObject").forEach((n) => n.remove());
+    for (const n of [root, ...root.querySelectorAll("*")]) {
+      for (const a of [...n.attributes]) {
+        const name = a.name.toLowerCase(), v = a.value.trim().toLowerCase();
+        if (name.startsWith("on") || ((name === "href" || name.endsWith(":href")) && !v.startsWith("#") && !v.startsWith("data:image/"))) {
+          n.removeAttributeNode(a);
+        }
+      }
+    }
+  }
+
   function setSVG(text, rect, layers) {
     base.replaceChildren();
     floorGroups = [];
@@ -243,6 +267,7 @@ window.TMap = (() => {
     const doc = new DOMParser().parseFromString(text, "image/svg+xml");
     const root = doc.documentElement;
     if (root && root.nodeName === "svg") {
+      cleanSVG(root);
       const inner = document.importNode(root, true);
       // растянуть на прямоугольник; preserveAspectRatio по умолчанию — как в Leaflet
       inner.setAttribute("x", R.x);

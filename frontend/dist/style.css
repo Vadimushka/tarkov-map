@@ -47,6 +47,7 @@ body { display: flex; flex-direction: column; }
 #loot-found { font-size: 11px; min-height: 15px; }
 #loot-q { width: 145px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
 #loot-q:disabled { opacity: .6; }
+#loot-q::-webkit-search-cancel-button { display: none; } /* свой × рядом, второй не нужен */
 #loot-clear { padding: 2px 8px; }
 
 .side label { border: 1px solid var(--line); border-radius: 6px; padding: 10px 16px; font-size: 14px; }

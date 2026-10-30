@@ -34,7 +34,7 @@ func (y *Syncer) Use(mode string) error {
 			if y.failed[mode] {
 				return err
 			}
-			if ferr := y.store.Fetch(mode); ferr != nil {
+			if ferr := y.store.Fetch(mode, false); ferr != nil {
 				y.failed[mode] = true
 				return fmt.Errorf("%w (%v)", ErrNoData, ferr)
 			}
@@ -54,7 +54,7 @@ func (y *Syncer) Use(mode string) error {
 
 func (y *Syncer) refresh(mode string) {
 	defer y.wg.Done()
-	err := y.store.Fetch(mode) // долго — без замка
+	err := y.store.Fetch(mode, false) // долго — без замка
 	y.mu.Lock()
 	delete(y.busy, mode)
 	changed := false
@@ -75,7 +75,7 @@ func (y *Syncer) Refresh(mode string) error {
 	y.mu.Lock()
 	y.failed = map[string]bool{}
 	y.mu.Unlock()
-	err := y.store.Fetch(mode)
+	err := y.store.Fetch(mode, true)
 	y.mu.Lock()
 	defer y.mu.Unlock()
 	if err != nil {

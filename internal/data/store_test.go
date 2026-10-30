@@ -263,7 +263,7 @@ func TestFetchReportsNetworkError(t *testing.T) {
 	_, fs, c, dir := loaded(t)
 	s := newStore(t, fs, c, dir)
 	fs.fail.Store(true)
-	if err := s.Fetch("pve"); err == nil {
+	if err := s.Fetch("pve", true); err == nil {
 		t.Error("Fetch при ошибке сервера вернул nil")
 	}
 	if err := s.LoadCached("pve"); err != nil {

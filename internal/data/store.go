@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -61,6 +62,9 @@ type Store struct {
 	MapsJSONURL string
 	SVGBase     string // "" — брать svgPath как есть
 	SVGFallback string
+	// Seed — снимок данных, встроенный в exe, с путями как в кэше (maps.json, svg/X.svg);
+	// nil — без снимка. Без сети приложение работает на нём с первого запуска.
+	Seed fs.FS
 
 	dir    string
 	client *http.Client
@@ -120,8 +124,11 @@ func (s *Store) Load(mode string, force bool) error {
 }
 
 // LoadCached разбирает кэш режима любой давности, не обращаясь к сети; нет файлов — ErrNoData.
+// Недостающее или более старое, чем снимок, сначала берётся из снимка.
 func (s *Store) LoadCached(mode string) error {
+	s.seed(s.itemsFile(mode).name)
 	for _, f := range s.files(mode) {
+		s.seed(f.name)
 		if _, err := os.Stat(filepath.Join(s.dir, f.name)); err != nil {
 			return fmt.Errorf("%w (%s)", ErrNoData, f.name)
 		}
@@ -149,16 +156,23 @@ func (s *Store) Stale(mode string) bool {
 	return err != nil || s.now().Sub(st.ModTime()) >= ttl
 }
 
-// Fetch скачивает файлы режима, не трогая данные в памяти. Ошибка — сеть не ответила;
-// уже лежащие файлы при этом остаются прежними. Неудача с названиями предметов ошибкой
-// не считается, а только запоминается (см. Stale).
-func (s *Store) Fetch(mode string) error {
+// Fetch скачивает файлы режима, не трогая данные в памяти: все при force, иначе только
+// отсутствующие и устаревшие. Ошибка — сеть не ответила; уже лежащие файлы при этом
+// остаются прежними. Неудача с названиями предметов ошибкой не считается, а только
+// запоминается (см. Stale).
+func (s *Store) Fetch(mode string, force bool) error {
 	for _, f := range s.files(mode) {
+		if !force && s.fresh(f.name) {
+			continue
+		}
 		if err := s.download(f.url, filepath.Join(s.dir, f.name)); err != nil {
 			return fmt.Errorf("%s: %w", f.name, err)
 		}
 	}
 	it := s.itemsFile(mode)
+	if !force && s.fresh(it.name) {
+		return nil
+	}
 	failed := s.download(it.url, filepath.Join(s.dir, it.name)) != nil
 	s.mu.Lock()
 	if s.itemsFailed == nil {
@@ -202,6 +216,46 @@ func (s *Store) ensure(url, name string, force bool) error {
 		return fmt.Errorf("%w (%s: %v)", ErrNoData, name, err)
 	}
 	return nil
+}
+
+// fresh — файл кэша есть и моложе суток.
+func (s *Store) fresh(name string) bool {
+	st, err := os.Stat(filepath.Join(s.dir, name))
+	return err == nil && s.now().Sub(st.ModTime()) < ttl
+}
+
+// seed подкладывает в кэш файл из снимка, если в кэше его нет или он старше снимка.
+// Время файла — время снимка: устаревший снимок обновится из сети, как обычный кэш.
+// Битый снимок не мешает: файл остаётся каким был.
+func (s *Store) seed(name string) {
+	if s.Seed == nil {
+		return
+	}
+	src, err := fs.Stat(s.Seed, name)
+	if err != nil {
+		return
+	}
+	dst := filepath.Join(s.dir, filepath.FromSlash(name))
+	l, _ := s.fileLocks.LoadOrStore(dst, &sync.Mutex{})
+	l.(*sync.Mutex).Lock()
+	defer l.(*sync.Mutex).Unlock()
+	if cur, err := os.Stat(dst); err == nil && !cur.ModTime().Before(src.ModTime()) {
+		return
+	}
+	b, err := fs.ReadFile(s.Seed, name)
+	if err != nil || os.MkdirAll(filepath.Dir(dst), 0o755) != nil {
+		return
+	}
+	// своё имя временного файла: кэш может делить вторая копия приложения
+	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.seed")
+	if err != nil {
+		return
+	}
+	_, werr := tmp.Write(b)
+	if cerr := tmp.Close(); werr != nil || cerr != nil || os.Chtimes(tmp.Name(), src.ModTime(), src.ModTime()) != nil ||
+		os.Rename(tmp.Name(), dst) != nil {
+		os.Remove(tmp.Name())
+	}
 }
 
 // download атомарно заменяет dst; закачки одного файла идут по очереди (общий .tmp).
@@ -302,6 +356,7 @@ func (s *Store) Updated() time.Time {
 // (старше суток) файл отдаётся сразу и обновляется в фоне — к следующему открытию карты.
 func (s *Store) SVG(def mapgeo.MapDef) (string, error) {
 	p := s.svgFile(def)
+	s.seed("svg/" + filepath.Base(p))
 	if b, err := os.ReadFile(p); err == nil {
 		if st, err := os.Stat(p); err == nil && s.now().Sub(st.ModTime()) >= ttl {
 			if _, busy := s.svgRefresh.LoadOrStore(p, true); !busy {

@@ -103,7 +103,7 @@ func TestStaleWantsItemsFileOnce(t *testing.T) {
 	if !s.Stale("pve") {
 		t.Error("без items_ru данные считаются устаревшими — его надо попробовать скачать")
 	}
-	if err := s.Fetch("pve"); err != nil {
+	if err := s.Fetch("pve", true); err != nil {
 		t.Fatalf("Fetch не должен падать из-за items_ru: %v", err)
 	}
 	if s.Stale("pve") {

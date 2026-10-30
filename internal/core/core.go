@@ -16,6 +16,8 @@ import (
 type MapSource interface {
 	MapByScene(scene string) (data.GameMap, bool)
 	MapDef(normalizedName string) (mapgeo.MapDef, bool)
+	Labels(normalizedName string) []data.Label
+	ItemName(id string) (data.ItemName, bool)
 }
 
 type Snapshot struct {
@@ -45,6 +47,7 @@ type MapView struct {
 	Rect        mapgeo.Rect
 	Layers      []LayerInfo
 	Markers     []Marker
+	ContentGen  int // меняется, когда метки карты (Content) могли измениться
 }
 
 type Core struct {
@@ -61,6 +64,7 @@ type Core struct {
 	route     []shots.Shot
 	keys      map[string]bool
 	held      []heldShot // скрины, пришедшие раньше прочитанной строки GameStarted
+	gen       int        // поколение меток: растёт на каждой смене карты или данных
 }
 
 type heldShot struct {
@@ -135,6 +139,7 @@ func (c *Core) SetSource(src MapSource) {
 }
 
 func (c *Core) resolve() {
+	c.gen++
 	c.gm, c.known = data.GameMap{}, false
 	c.def, c.supported = mapgeo.MapDef{}, false
 	if c.scene == "" || c.src == nil {
@@ -168,7 +173,7 @@ func (c *Core) View() MapView {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
-	v := MapView{MapID: c.gm.NormalizedName, Name: c.gm.Name, Supported: c.supported, Layers: []LayerInfo{}, Markers: []Marker{}}
+	v := MapView{MapID: c.gm.NormalizedName, Name: c.gm.Name, Supported: c.supported, Layers: []LayerInfo{}, Markers: []Marker{}, ContentGen: c.gen}
 	if !c.supported {
 		return v
 	}

@@ -280,6 +280,12 @@ func (a *App) GetView() core.MapView {
 	return a.core.View()
 }
 
+// GetMapContent — метки вкладки «Лут и места» текущей карты; фронтенд берёт их
+// заново, когда меняется MapView.ContentGen.
+func (a *App) GetMapContent() core.MapContent {
+	return a.core.Content()
+}
+
 func (a *App) GetSVG(mapID string) (string, error) {
 	def, ok := a.store.MapDef(mapID)
 	if !ok {
@@ -303,6 +309,10 @@ func (a *App) SetSide(side string) error {
 
 func (a *App) SetFilters(f map[string]bool) error {
 	return a.updateSettings(func(s *settings.Settings) { s.Filters = f })
+}
+
+func (a *App) SetLootQuery(q string) error {
+	return a.updateSettings(func(s *settings.Settings) { s.LootQuery = q })
 }
 
 // SetPaths сохраняет ручные пути ("" — автопоиск) и перезапускает слежение.

@@ -27,3 +27,15 @@ func TestSettingsDefaults(t *testing.T) {
 		t.Errorf("по умолчанию: %+v", s)
 	}
 }
+
+func TestLootQueryRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := Load(dir)
+	s.LootQuery = "флешка"
+	if err := Save(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load(dir).LootQuery; got != "флешка" {
+		t.Errorf("LootQuery = %q", got)
+	}
+}

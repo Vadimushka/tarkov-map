@@ -24,8 +24,15 @@ func (fakeSrc) MapByScene(scene string) (data.GameMap, bool) {
 	switch scene {
 	case "maps/shopping_mall.bundle":
 		return data.GameMap{NormalizedName: "interchange", Name: "Развязка", ScenePath: scene,
-			Extracts: []data.Extract{{Name: "Безопасная комната", Faction: "pmc", Pos: mapgeo.Vec3{X: -48, Y: 23, Z: 44}}},
-			Transits: []data.Transit{{Name: "Переход на Таможню", Pos: mapgeo.Vec3{X: 280, Y: 20, Z: 435}}}}, true
+			Extracts:   []data.Extract{{Name: "Безопасная комната", Faction: "pmc", Pos: mapgeo.Vec3{X: -48, Y: 23, Z: 44}}},
+			Transits:   []data.Transit{{Name: "Переход на Таможню", Pos: mapgeo.Vec3{X: 280, Y: 20, Z: 435}}},
+			Containers: []data.Container{{Group: "weapon", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}},
+			Loose:      []data.Loose{{Pos: mapgeo.Vec3{X: 0, Y: 30, Z: 0}, Items: []string{"i_led", "i_unknown"}}},
+			Locks:      []data.Lock{{Kind: "door", KeyID: "i_key", Pos: mapgeo.Vec3{X: 3, Y: 1, Z: 4}}},
+			Hazards: []data.Hazard{{Kind: "minefield", Pos: mapgeo.Vec3{X: 7, Y: 1, Z: 8},
+				Outline: []mapgeo.Vec3{{X: 0, Y: 1, Z: 0}, {X: 10, Y: 1, Z: 0}, {X: 10, Y: 1, Z: 10}}}},
+			Bosses: []data.Boss{{Name: "Килла", Chance: 0.75, Spots: []data.BossSpot{{Chance: 0.33, Pos: mapgeo.Vec3{X: 1, Y: 1, Z: 1}}}}},
+		}, true
 	case "maps/laboratory_preset.bundle":
 		return data.GameMap{NormalizedName: "the-lab", Name: "Лаборатория", ScenePath: scene}, true
 	case "maps/sandbox_start_preset.bundle": // обучающий Эпицентр: ни выходов, ни переходов
@@ -33,6 +40,27 @@ func (fakeSrc) MapByScene(scene string) (data.GameMap, bool) {
 	}
 	return data.GameMap{}, false
 }
+
+func (fakeSrc) Labels(n string) []data.Label {
+	if n != "interchange" {
+		return nil
+	}
+	bottom, top := 25.0, 33.0
+	return []data.Label{{Text: "IDEA", X: -34, Z: -235, Bottom: &bottom, Top: &top}, {Text: "Электростанция", X: -186, Z: -319}}
+}
+
+func (fakeSrc) ItemName(id string) (data.ItemName, bool) {
+	n, ok := map[string]data.ItemName{
+		"i_led": {Name: "Транспортир LEDX", Short: "LEDX"},
+		"i_key": {Name: "Ключ от КПП", Short: "КПП"},
+	}[id]
+	return n, ok
+}
+
+// noItemsSrc — данные без файла названий предметов.
+type noItemsSrc struct{ fakeSrc }
+
+func (noItemsSrc) ItemName(string) (data.ItemName, bool) { return data.ItemName{}, false }
 
 func (fakeSrc) MapDef(n string) (mapgeo.MapDef, bool) {
 	if n == "interchange" || n == "ground-zero" {

@@ -16,6 +16,7 @@ type Settings struct {
 	GameDir, ShotsDir string          // ручные пути; "" — автопоиск
 	Side              string          // "pmc" | "scav"
 	Filters           map[string]bool // ключи задаёт фронтенд
+	LootQuery         string          // строка поиска лута на земле
 	Window            *WindowPos
 }
 

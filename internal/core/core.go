@@ -24,7 +24,8 @@ type Snapshot struct {
 	Mode, MapID, MapName string
 	Supported            bool
 	Manual               bool // карта выбрана вручную, а не загружена игрой
-	RaidStart            time.Time
+	RaidStart, RaidEnd   time.Time
+	RaidMinutes          int    // длительность рейда на карте игры; 0 — неизвестна
 	LastShot             string // "21:40" или ""
 	Message              string
 }
@@ -52,7 +53,6 @@ type MapView struct {
 	Layers      []LayerInfo
 	Markers     []Marker
 	ContentGen  int // меняется, когда метки карты (Content) могли измениться
-	RaidMinutes int // длительность рейда на этой карте; 0 — неизвестна
 }
 
 // mapState — карта по сцене; supported — для неё есть SVG.
@@ -190,7 +190,7 @@ func (c *Core) Snapshot() Snapshot {
 	defer c.mu.Unlock()
 	m := c.shown()
 	s := Snapshot{Mode: c.mode, MapID: m.gm.NormalizedName, MapName: m.gm.Name, Supported: m.supported,
-		Manual: c.manual.scene != "", RaidStart: c.raidStart}
+		Manual: c.manual.scene != "", RaidStart: c.raidStart, RaidEnd: c.raidEnd, RaidMinutes: c.game.gm.RaidMinutes}
 	if n := len(c.route); n > 0 {
 		s.LastShot = c.route[n-1].Time
 	}
@@ -211,7 +211,7 @@ func (c *Core) View() MapView {
 	m := c.shown()
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
 	v := MapView{MapID: m.gm.NormalizedName, Name: m.gm.Name, Supported: m.supported, Layers: []LayerInfo{}, Markers: []Marker{},
-		ContentGen: c.gen, RaidMinutes: m.gm.RaidMinutes}
+		ContentGen: c.gen}
 	if !m.supported {
 		return v
 	}

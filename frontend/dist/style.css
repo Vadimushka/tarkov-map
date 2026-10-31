@@ -80,6 +80,8 @@ input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid
 #status { flex: none; height: 26px; line-height: 26px; padding: 0 12px; background: var(--panel); border-top: 1px solid var(--line); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #status b { color: var(--text); font-weight: 600; }
 #status .bad { color: #f07b6b; }
+#clock { font-variant-numeric: tabular-nums; }
+#clock .warn { color: #f0c36b; }
 
 #tip { position: fixed; pointer-events: none; background: #000c; padding: 4px 8px; border-radius: 4px; font-size: 12px; display: none; white-space: pre-line; max-width: 360px; z-index: 10; }
 

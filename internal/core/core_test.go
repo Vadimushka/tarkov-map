@@ -256,3 +256,17 @@ func TestHeldShotsDroppedOnNewMap(t *testing.T) {
 		t.Errorf("скрин прошлой загрузки карты попал в маршрут: %d", n)
 	}
 }
+
+// Таймер рейда: начало, конец и длительность — карты игры, даже когда вручную показана другая.
+func TestSnapshotRaidClock(t *testing.T) {
+	c := inRaid()
+	c.SelectMap("maps/laboratory_preset.bundle")
+	s := c.Snapshot()
+	if !s.RaidStart.Equal(at(21, 6, 12)) || !s.RaidEnd.IsZero() || s.RaidMinutes != 40 {
+		t.Errorf("в рейде: старт %v, конец %v, минут %d", s.RaidStart, s.RaidEnd, s.RaidMinutes)
+	}
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvRaidEnd, At: at(21, 40, 0)})
+	if s := c.Snapshot(); !s.RaidEnd.Equal(at(21, 40, 0)) {
+		t.Errorf("после рейда: конец %v", s.RaidEnd)
+	}
+}

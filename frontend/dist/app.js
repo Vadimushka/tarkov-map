@@ -325,10 +325,42 @@
     return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
+  // --- часы Таркова и таймер рейда ---
+  // Время в Таркове идёт в 7 раз быстрее реального и по Москве (UTC+3); вторые часы — на 12 часов
+  // позже (их выбирают при входе в рейд). На Заводе время стоит: днём 15:28, ночью 03:28.
+  const HOUR = 3600e3;
+  const FIXED_TIME = { factory: "15:28", "night-factory": "03:28" };
+  const two = (n) => String(n).padStart(2, "0");
+  function tarkovTime(ms, late) {
+    const t = (ms * 7 + 3 * HOUR + (late ? 12 * HOUR : 0)) % (24 * HOUR);
+    return two(Math.floor(t / HOUR)) + ":" + two(Math.floor((t % HOUR) / 60e3));
+  }
+  const when = (iso) => { const t = Date.parse(iso); return t > 0 ? t : 0; }; // нулевое время Go — 0001 год
+
+  function tick() {
+    const s = snapshot || {}, now = Date.now(), clock = $("#clock");
+    clock.replaceChildren();
+    const tt = document.createElement("span");
+    tt.textContent = FIXED_TIME[s.MapID] || tarkovTime(now, false) + " / " + tarkovTime(now, true);
+    tt.title = FIXED_TIME[s.MapID] ? "Время в Таркове: на Заводе оно не идёт" : "Время в Таркове: дневной и ночной рейд";
+    clock.append(tt);
+    const start = when(s.RaidStart);
+    if (start && !when(s.RaidEnd) && s.RaidMinutes > 0) {
+      const left = Math.round((start + s.RaidMinutes * 60e3 - now) / 1000), r = document.createElement("b");
+      r.textContent = left > 0 ? `до конца рейда ${Math.floor(left / 60)}:${two(left % 60)}` : "время рейда вышло";
+      r.className = left > 300 ? "" : "warn";
+      r.title = `Рейд на этой карте — ${s.RaidMinutes} мин; отсчёт от начала рейда в логе игры`;
+      clock.append(" · ", r);
+    }
+    clock.append(" · ");
+  }
+  setInterval(tick, 1000);
+
   async function updateStatus() {
     const s = snapshot || {};
     const [p, updated] = await Promise.all([go().GetPaths(), go().GetDataUpdated()]);
-    const st = $("#status");
+    tick();
+    const st = $("#status-main");
     st.replaceChildren();
     const add = (text, cls, title) => {
       if (st.childNodes.length) st.append(" · ");

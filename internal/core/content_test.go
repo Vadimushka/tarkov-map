@@ -93,9 +93,6 @@ func TestViewExtractDetails(t *testing.T) {
 	c := New(fakeSrc{})
 	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, Bundle: "maps/shopping_mall.bundle"})
 	v := c.View()
-	if v.RaidMinutes != 40 {
-		t.Errorf("RaidMinutes = %d", v.RaidMinutes)
-	}
 	var e Marker
 	for _, m := range v.Markers {
 		if m.Kind == "extract" {

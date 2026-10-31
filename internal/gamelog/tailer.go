@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 )
 
 // LatestSession возвращает подпапку логов с самым свежим временем изменения.
@@ -34,17 +33,18 @@ func LatestSession(logsDir string) (string, error) {
 	return best, nil
 }
 
-// Tailer читает application_*.log текущей сессии: новую сессию — с начала,
-// дальше — только дописанные полные строки.
+// Tailer читает application_*.log и push-notifications_*.log текущей сессии: новую
+// сессию — с начала, дальше — только дописанные полные строки.
 type Tailer struct {
 	logsDir string
 	onEvent func(Event)
 	session string
 	offsets map[string]int64
+	quests  map[string]*questReader // по файлу уведомлений: блок может прийти за два опроса
 }
 
 func NewTailer(logsDir string, onEvent func(Event)) *Tailer {
-	return &Tailer{logsDir: logsDir, onEvent: onEvent, offsets: map[string]int64{}}
+	return &Tailer{logsDir: logsDir, onEvent: onEvent, offsets: map[string]int64{}, quests: map[string]*questReader{}}
 }
 
 // Poll вызывается раз в секунду.
@@ -56,23 +56,23 @@ func (t *Tailer) Poll() error {
 	if session != t.session {
 		t.session = session
 		t.offsets = map[string]int64{}
+		t.quests = map[string]*questReader{}
 	}
-	// не filepath.Glob: скобки в пути к игре он принял бы за шаблон
-	var files []string
-	entries, _ := os.ReadDir(session)
-	for _, e := range entries {
-		if ok, _ := filepath.Match("*application_*.log", e.Name()); ok && !e.IsDir() {
-			files = append(files, filepath.Join(session, e.Name()))
+	for _, f := range logFiles(session, "*application_*.log") {
+		t.readFile(f, ParseLine)
+	}
+	for _, f := range logFiles(session, "*push-notifications_*.log") {
+		r := t.quests[f]
+		if r == nil {
+			r = &questReader{}
+			t.quests[f] = r
 		}
-	}
-	sort.Strings(files)
-	for _, f := range files {
-		t.readFile(f)
+		t.readFile(f, r.line)
 	}
 	return nil
 }
 
-func (t *Tailer) readFile(path string) {
+func (t *Tailer) readFile(path string, parse func(string) (Event, bool)) {
 	h, err := os.Open(path)
 	if err != nil {
 		return
@@ -84,7 +84,7 @@ func (t *Tailer) readFile(path string) {
 	}
 	off := t.offsets[path]
 	if info.Size() < off {
-		off = 0 // файл пересоздан
+		off = 0 // файл пересоздан; недочитанный блок уведомления отбросит первая же строка лога
 	}
 	if info.Size() == off {
 		return
@@ -102,7 +102,7 @@ func (t *Tailer) readFile(path string) {
 	}
 	t.offsets[path] = off + int64(last) + 1
 	for _, line := range bytes.Split(buf[:last], []byte{'\n'}) {
-		if e, ok := ParseLine(string(bytes.TrimRight(line, "\r"))); ok {
+		if e, ok := parse(string(bytes.TrimRight(line, "\r"))); ok {
 			t.onEvent(e)
 		}
 	}

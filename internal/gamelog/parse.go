@@ -13,14 +13,17 @@ const (
 	EvMap
 	EvRaidStart
 	EvRaidEnd // рейд окончен: выход в меню или убежище
+	EvQuest   // задание взято, провалено или сдано (push-notifications)
 )
 
 // Event — значимая строка лога.
 type Event struct {
-	Kind   Kind
-	At     time.Time // из префикса строки, локальное время
-	Mode   string    // "pve" | "regular" (EvMode)
-	Bundle string    // "maps/shopping_mall.bundle" (EvMap)
+	Kind    Kind
+	At      time.Time // из префикса строки, локальное время
+	Mode    string    // "pve" | "regular" (EvMode)
+	Bundle  string    // "maps/shopping_mall.bundle" (EvMap)
+	QuestID string    // EvQuest
+	Status  string    // EvQuest: "start" | "fail" | "done"
 }
 
 const timeLayout = "2006-01-02 15:04:05.000"

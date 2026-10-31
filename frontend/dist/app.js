@@ -36,8 +36,8 @@
   function applySide() {
     document.querySelectorAll("[name=side]").forEach((r) => (r.checked = r.value === side));
     const other = side === "pmc" ? "scav" : "pmc";
-    $("[data-own]").style.background = `var(--${side})`;
-    $("[data-other]").style.background = `var(--${other})`;
+    document.querySelectorAll("[data-own]").forEach((s) => (s.style.background = `var(--${side})`));
+    document.querySelectorAll("[data-other]").forEach((s) => (s.style.background = `var(--${other})`));
   }
 
   function applyFilters() {
@@ -56,11 +56,15 @@
       go().SetSide(side).catch(console.error);
     }),
   );
+  // один флажок бывает и на панели, и в окне: отметка расходится по всем копиям
   document.querySelectorAll("[data-f]").forEach((cb) =>
     cb.addEventListener("change", () => {
-      filters[cb.dataset.f] = cb.checked;
-      TMap.setFilter(cb.dataset.f, cb.checked);
-      if (cb.dataset.f === "quests_active") applyQuests();
+      const key = cb.dataset.f;
+      filters[key] = cb.checked;
+      document.querySelectorAll(`[data-f="${key}"]`).forEach((x) => (x.checked = cb.checked));
+      TMap.setFilter(key, cb.checked);
+      if (key === "quests_active") applyQuests();
+      fillPresets();
       go().SetFilters(filters).catch(console.error);
     }),
   );
@@ -69,7 +73,7 @@
   function buildFloors(layers) {
     const box = $("#floors");
     box.replaceChildren();
-    $("#floors-group").hidden = layers.length < 2;
+    $("#floors").hidden = layers.length < 2;
     for (const l of layers) {
       const lab = document.createElement("label");
       const r = document.createElement("input");
@@ -305,12 +309,6 @@
     }).catch(console.error);
   }
 
-  // список виден на вкладке «Задания», пока лента развёрнута и карта на экране
-  function showQuestList() {
-    const tab = document.querySelector(".tab.active[data-tab]");
-    questList.hidden = !(tab && tab.dataset.tab === "quests" && !ribbon.classList.contains("collapsed") && view);
-  }
-
   // --- вид карты ---
   let busy = false, again = false;
   async function loadView() {
@@ -336,7 +334,6 @@
       TMap.clear();
       dropContent();
       showMessage();
-      showQuestList();
       showNearest();
       return;
     }
@@ -351,7 +348,6 @@
         TMap.clear();
         dropContent();
         showMessage();
-        showQuestList();
         showNearest();
         return;
       }
@@ -372,7 +368,6 @@
     view = v;
     TMap.render(v, side);
     applyFilters();
-    showQuestList();
     showNearest();
     const shots = v.Markers.filter((m) => m.Kind === "shot");
     // новый скрин — показать этаж, на котором он сделан, и при слежении удержать его в кадре
@@ -524,48 +519,111 @@
     if (!view) showMessage();
   }
 
-  // --- лента: вкладки, сворачивание двойным щелчком ---
-  const ribbon = $("#ribbon");
+  // --- окно «Слои и настройки»: справа над картой, без затемнения ---
+  const panel = $("#panel");
   function selectTab(name) {
-    document.querySelectorAll(".tab[data-tab]").forEach((t) => {
+    document.querySelectorAll(".ptab").forEach((t) => {
       t.classList.toggle("active", t.dataset.tab === name);
       t.setAttribute("aria-selected", t.dataset.tab === name);
     });
-    document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", p.dataset.pane === name));
-    if (name === "settings") fillSettings().catch(console.error);
-    showQuestList();
+    document.querySelectorAll(".ppane").forEach((p) => p.classList.toggle("active", p.dataset.pane === name));
+    if (name === "app") fillSettings().catch(console.error);
+    try { localStorage.setItem("panelTab", name); } catch (e) { /* без хранилища — не запоминаем */ }
   }
-  function setCollapsed(on) {
-    ribbon.classList.toggle("collapsed", on);
-    $("#collapse").textContent = on ? "˅" : "˄";
-    $("#collapse").title = on ? "Развернуть ленту" : "Свернуть ленту";
-    showQuestList();
-    try { localStorage.setItem("ribbonCollapsed", on ? "1" : ""); } catch (e) { /* без хранилища — не запоминаем */ }
+  function openPanel(on) {
+    panel.hidden = !on;
+    $("#open-panel").classList.toggle("primary", !on);
   }
-  let justExpanded = false; // двойной щелчок по свёрнутой ленте оставляет её развёрнутой
-  document.querySelectorAll(".tab[data-tab]").forEach((t) => {
-    t.addEventListener("click", (e) => {
-      if (e.detail === 2) {
-        if (!justExpanded) setCollapsed(true);
-        justExpanded = false;
-        return;
-      }
-      justExpanded = ribbon.classList.contains("collapsed");
-      if (justExpanded) setCollapsed(false);
-      selectTab(t.dataset.tab);
-    });
+  document.querySelectorAll(".ptab").forEach((t) => t.addEventListener("click", () => selectTab(t.dataset.tab)));
+  $("#open-panel").addEventListener("click", () => openPanel(panel.hidden));
+  $("#close-panel").addEventListener("click", () => openPanel(false));
+  // Esc закрывает сначала карточку метки (это делает map.js), а окно — когда карточки нет
+  addEventListener("keydown", (e) => {
+    const typing = e.target.matches && e.target.matches("input[type=search], input:not([type])"); // Esc в поле — очистить поле
+    if (e.key === "Escape" && $("#card").hidden && !typing) openPanel(false);
+  }, true);
+  let lastTab = "layers";
+  try { lastTab = localStorage.getItem("panelTab") || "layers"; } catch (e) { /* первая вкладка */ }
+  selectTab(document.querySelector(`.ptab[data-tab="${lastTab}"]`) ? lastTab : "layers");
+
+  // --- наборы слоёв: флажки под своим названием ---
+  let presets = []; // [{Name, Filters}]
+  const presetPick = $("#preset-pick");
+  const presetName = $("#preset-name");
+  const isCurrent = (p) => Object.keys(FILTER_DEFAULTS).every((k) => !!filters[k] === (k in p.Filters ? !!p.Filters[k] : FILTER_DEFAULTS[k]));
+
+  // fillPresets — список вверху и во вкладке «Наборы»; выбран набор, совпадающий с флажками
+  function fillPresets() {
+    const cur = presets.find(isCurrent);
+    presetPick.replaceChildren(new Option(presets.length ? "Свой набор" : "Наборов нет", ""));
+    for (const p of presets) presetPick.add(new Option(p.Name, p.Name));
+    presetPick.value = cur ? cur.Name : "";
+    const list = $("#preset-list");
+    list.replaceChildren();
+    if (!presets.length) {
+      const d = document.createElement("div");
+      d.className = "muted";
+      d.textContent = "Наборов пока нет. Расставьте флажки во вкладке «Слои» и сохраните их здесь под своим названием.";
+      list.appendChild(d);
+    }
+    for (const p of presets) {
+      const row = document.createElement("div");
+      row.className = "preset" + (p === cur ? " cur" : "");
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = p.Name;
+      const use = document.createElement("button");
+      use.textContent = "Выбрать";
+      use.addEventListener("click", () => applyPreset(p));
+      const del = document.createElement("button");
+      del.className = "del";
+      del.textContent = "×";
+      del.title = "Удалить набор";
+      del.addEventListener("click", () => {
+        presets = presets.filter((x) => x !== p);
+        savePresets();
+      });
+      row.append(name, use, del);
+      list.appendChild(row);
+    }
+  }
+
+  function applyPreset(p) {
+    const active = filters.quests_active;
+    for (const k in FILTER_DEFAULTS) filters[k] = k in p.Filters ? !!p.Filters[k] : FILTER_DEFAULTS[k];
+    applyFilters();
+    if (active !== filters.quests_active) applyQuests();
+    go().SetFilters(filters).catch(console.error);
+    fillPresets();
+  }
+
+  function savePresets() {
+    fillPresets();
+    go().SetPresets(presets).catch(console.error);
+  }
+
+  presetPick.addEventListener("change", () => {
+    const p = presets.find((x) => x.Name === presetPick.value);
+    if (p) applyPreset(p);
   });
-  $("#collapse").addEventListener("click", () => setCollapsed(!ribbon.classList.contains("collapsed")));
-  // в узком окне лента не помещается и прокручивается вбок — колесом мыши тоже
-  document.querySelectorAll(".pane").forEach((p) => p.addEventListener("wheel", (ev) => {
-    if (p.scrollWidth <= p.clientWidth || ev.deltaX) return;
-    p.scrollLeft += ev.deltaY;
-    ev.preventDefault();
-  }, { passive: false }));
-  let collapsed = false;
-  try { collapsed = localStorage.getItem("ribbonCollapsed") === "1"; } catch (e) { /* по умолчанию развёрнута */ }
-  setCollapsed(collapsed);
-  selectTab("main");
+  $("#preset-save").addEventListener("click", () => {
+    const name = presetName.value.trim();
+    const res = $("#preset-result");
+    if (!name) {
+      res.textContent = "Введите название набора";
+      return;
+    }
+    const p = { Name: name, Filters: { ...filters } };
+    const i = presets.findIndex((x) => x.Name === name);
+    if (i >= 0) presets[i] = p;
+    else presets.push(p);
+    res.textContent = i >= 0 ? `Набор «${name}» обновлён` : `Набор «${name}» сохранён`;
+    presetName.value = "";
+    savePresets();
+  });
+  presetName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") $("#preset-save").click();
+  });
 
   // --- вкладка «Настройки» ---
   async function fillSettings() {
@@ -599,11 +657,13 @@
       for (const k in FILTER_DEFAULTS) filters[k] = k in saved ? !!saved[k] : FILTER_DEFAULTS[k];
       lootQ.value = st.LootQuery || "";
       hiddenTasks = new Set(st.HiddenTasks || []);
+      presets = (st.Presets || []).map((p) => ({ Name: p.Name, Filters: p.Filters || {} }));
     } catch (e) {
       console.error(e);
     }
     applySide();
     applyFilters();
+    fillPresets();
     window.runtime.EventsOn("snapshot", (s) => {
       snapshot = s;
       updateStatus().catch(console.error);

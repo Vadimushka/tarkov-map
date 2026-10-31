@@ -112,3 +112,22 @@ func TestSetHiddenTasks(t *testing.T) {
 		t.Errorf("на диске %v", got)
 	}
 }
+
+// Наборы слоёв: имя обрезается, пустое отбрасывается, у одинаковых имён остаётся последний.
+func TestSetPresets(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{cfgDir: dir, set: settings.Load(dir)}
+	err := a.SetPresets([]settings.Preset{
+		{Name: " Рейд ", Filters: map[string]bool{"extract_own": true}},
+		{Name: "  ", Filters: map[string]bool{"loot_all": true}},
+		{Name: "Лут", Filters: map[string]bool{"loot_all": true}},
+		{Name: "Рейд", Filters: map[string]bool{"extract_own": false}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := settings.Load(dir).Presets
+	if len(got) != 2 || got[0].Name != "Рейд" || got[0].Filters["extract_own"] || got[1].Name != "Лут" || !got[1].Filters["loot_all"] {
+		t.Errorf("на диске %+v", got)
+	}
+}

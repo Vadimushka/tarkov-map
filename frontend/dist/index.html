@@ -6,64 +6,71 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header id="ribbon">
-  <nav class="tabs" role="tablist" title="Двойной щелчок по вкладке — свернуть или развернуть ленту">
-    <button class="tab" role="tab" data-tab="main">Главная</button>
-    <button class="tab" role="tab" data-tab="loot">Лут и места</button>
-    <button class="tab" role="tab" data-tab="quests">Задания</button>
-    <button class="tab" role="tab" data-tab="settings">Настройки</button>
-    <span class="spacer"></span>
-    <select id="map-pick" title="Какую карту показывать. Ручной выбор действует, пока игра не загрузит следующую карту">
-      <option value="">Карта как в игре</option>
-    </select>
-    <button id="collapse" class="tab" title="Свернуть ленту">˄</button>
-  </nav>
+<!-- на экране — то, что нужно в рейде; всё остальное — в окне «Слои и настройки» -->
+<header id="bar">
+  <div class="seg side" role="radiogroup" aria-label="Сторона">
+    <label><input type="radio" name="side" value="pmc">ЧВК</label>
+    <label><input type="radio" name="side" value="scav">Дикий</label>
+  </div>
+  <div class="chips">
+    <label class="chip" title="Выходы вашей стороны"><input type="checkbox" data-f="extract_own"><span class="sw" data-own></span>Мои выходы</label>
+    <label class="chip" title="Выходы для обеих сторон"><input type="checkbox" data-f="extract_shared"><span class="sw" style="background:var(--shared)"></span>Совместные</label>
+    <label class="chip" title="Переходы на другие карты"><input type="checkbox" data-f="transit"><span class="sw" style="background:var(--transit)"></span>Переходы</label>
+    <label class="chip" title="Пройденный путь по скринам"><input type="checkbox" data-f="trail"><span class="sw trail"></span>Путь</label>
+    <label class="chip" title="Цели заданий на карте; список — в окне «Слои и настройки»"><input type="checkbox" data-f="quests"><span class="sw" style="background:var(--quest)"></span>Задания</label>
+  </div>
+  <div class="search">
+    <input id="loot-q" type="search" placeholder="Найти: флешка, Ледокол…" title="Несколько слов — через запятую. Ищет лут на земле, контейнеры по названию и замки по названию ключа; что внутри контейнеров, неизвестно" spellcheck="false">
+    <button id="loot-clear" title="Очистить">×</button>
+    <span id="loot-found" class="muted"></span>
+  </div>
+  <span class="spacer"></span>
+  <select id="preset-pick" title="Набор слоёв. Сохранить текущие флажки как набор — в окне «Слои и настройки» → «Наборы»">
+    <option value="">Свой набор</option>
+  </select>
+  <select id="map-pick" title="Какую карту показывать. Ручной выбор действует, пока игра не загрузит следующую карту">
+    <option value="">Карта как в игре</option>
+  </select>
+  <button id="open-panel" class="primary" title="Все слои, список заданий, наборы и настройки программы">☰ Слои и настройки</button>
+</header>
 
-  <div class="pane" data-pane="main">
-    <section class="group">
-      <div class="items side" role="radiogroup" aria-label="Сторона">
-        <label><input type="radio" name="side" value="pmc">ЧВК</label>
-        <label><input type="radio" name="side" value="scav">Дикий</label>
-      </div>
-      <div class="caption">Сторона</div>
-    </section>
-    <section class="group">
-      <div class="items grid">
+<main id="view">
+  <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <!-- кнопки на карте: этажи, слежение, вид -->
+  <div id="mapctl">
+    <div id="floors" hidden title="Этаж. Ctrl + колесо мыши над картой — этаж выше или ниже"></div>
+    <label class="mbtn" title="Новый скрин всегда в кадре, даже если карту сдвинули или приблизили. Чтобы спокойно рассматривать карту, снимите флажок."><input type="checkbox" id="follow" checked>Следовать за мной</label>
+    <button id="center" class="mbtn" disabled>Центр на мне</button>
+    <button id="fit" class="mbtn" disabled>Вся карта</button>
+  </div>
+
+  <!-- окно без затемнения: карта рядом остаётся видна и сразу показывает изменения -->
+  <aside id="panel" hidden role="dialog" aria-label="Слои и настройки">
+    <div class="phead">
+      <nav class="ptabs" role="tablist">
+        <button class="ptab" role="tab" data-tab="layers">Слои</button>
+        <button class="ptab" role="tab" data-tab="quests">Задания</button>
+        <button class="ptab" role="tab" data-tab="presets">Наборы</button>
+        <button class="ptab" role="tab" data-tab="app">Программа</button>
+      </nav>
+      <button id="close-panel" class="close" title="Закрыть (Esc)">×</button>
+    </div>
+
+    <section class="ppane" data-pane="layers">
+      <h4>Карта</h4>
+      <div class="grid2">
         <label><input type="checkbox" data-f="position"><span class="sw" style="background:var(--route)"></span>Где я сейчас</label>
         <label><input type="checkbox" data-f="trail"><span class="sw trail"></span>Пройденный путь</label>
-        <label><input type="checkbox" data-f="transit"><span class="sw" style="background:var(--transit)"></span>Переходы</label>
         <label><input type="checkbox" data-f="extract_own"><span class="sw" data-own></span>Мои выходы</label>
         <label><input type="checkbox" data-f="extract_shared"><span class="sw" style="background:var(--shared)"></span>Совместные выходы</label>
         <label><input type="checkbox" data-f="extract_other"><span class="sw" data-other></span>Выходы другой стороны</label>
-        <label title="Выключите — останутся значки, название покажется при наведении"><input type="checkbox" data-f="labels"><span class="sw txt">Аа</span>Подписи</label>
-      </div>
-      <div class="caption">Показывать</div>
-    </section>
-    <section class="group" id="floors-group" hidden title="Ctrl + колесо мыши над картой — этаж выше или ниже">
-      <div class="items grid" id="floors"></div>
-      <div class="caption">Этаж</div>
-    </section>
-    <section class="group">
-      <div class="items col">
-        <label title="Новый скрин всегда в кадре, даже если карту сдвинули или приблизили. Чтобы спокойно рассматривать карту, снимите флажок."><input type="checkbox" id="follow" checked>Следовать за мной</label>
-        <div class="row">
-          <button id="center" disabled>Центр на мне</button>
-          <button id="fit" disabled>Вся карта</button>
-        </div>
-      </div>
-      <div class="caption">Вид</div>
-    </section>
-  </div>
-
-  <div class="pane" data-pane="loot">
-    <section class="group">
-      <div class="items col">
+        <label><input type="checkbox" data-f="transit"><span class="sw" style="background:var(--transit)"></span>Переходы</label>
+        <label title="Выключите — останутся значки, название покажется при наведении"><input type="checkbox" data-f="labels"><span class="sw txt">Аа</span>Подписи выходов</label>
         <label><input type="checkbox" data-f="places"><span class="sw txt">Аа</span>Названия мест</label>
       </div>
-      <div class="caption">Места</div>
-    </section>
-    <section class="group">
-      <div class="items grid rows4">
+      <h4>Контейнеры</h4>
+      <div class="grid2">
         <label><input type="checkbox" data-f="c_weapon"><img class="ico" src="icons/container_weapon-box.png" alt="">Оружейные<span class="n" data-n="c_weapon"></span></label>
         <label><input type="checkbox" data-f="c_med"><img class="ico" src="icons/container_medbag.png" alt="">Медицина<span class="n" data-n="c_med"></span></label>
         <label><input type="checkbox" data-f="c_tech"><img class="ico" src="icons/container_toolbox.png" alt="">Техника<span class="n" data-n="c_tech"></span></label>
@@ -71,100 +78,68 @@
         <label><input type="checkbox" data-f="c_cache"><img class="ico" src="icons/container_buried-barrel-cache.png" alt="">Тайники<span class="n" data-n="c_cache"></span></label>
         <label><input type="checkbox" data-f="c_body"><img class="ico" src="icons/container_dead-scav.png" alt="">Тела<span class="n" data-n="c_body"></span></label>
         <label><input type="checkbox" data-f="c_misc"><img class="ico" src="icons/container_duffle-bag.png" alt="">Сумки и прочее<span class="n" data-n="c_misc"></span></label>
+        <label title="Все точки, где может лежать лут; найденное поиском видно и без этого флажка"><input type="checkbox" data-f="loot_all"><img class="ico" src="icons/loose_loot.png" alt="">Лут на земле<span class="n" data-n="loot_all"></span></label>
       </div>
-      <div class="caption">Контейнеры</div>
-    </section>
-    <section class="group">
-      <div class="items col loot">
-        <div class="row">
-          <input id="loot-q" type="search" placeholder="Флешка, Ледокол…" title="Несколько слов — через запятую. Ищет лут на земле, контейнеры по названию и замки по названию ключа; что внутри контейнеров, неизвестно" spellcheck="false">
-          <button id="loot-clear" title="Очистить">×</button>
-        </div>
-        <label><input type="checkbox" data-f="loot_all"><img class="ico" src="icons/loose_loot.png" alt="">Все точки<span class="n" data-n="loot_all"></span></label>
-        <span id="loot-found" class="muted"></span>
-      </div>
-      <div class="caption">Лут на земле</div>
-    </section>
-    <section class="group">
-      <div class="items grid">
+      <h4>Спавны</h4>
+      <div class="grid2">
         <label><input type="checkbox" data-f="spawn_pmc"><span class="sw dia" style="background:var(--pmc)"></span>ЧВК<span class="n" data-n="spawn_pmc"></span></label>
         <label><input type="checkbox" data-f="spawn_scav"><span class="sw dia" style="background:var(--scav)"></span>Дикие<span class="n" data-n="spawn_scav"></span></label>
         <label><input type="checkbox" data-f="spawn_sniper"><span class="sw dia" style="background:var(--sniper)"></span>Снайперы<span class="n" data-n="spawn_sniper"></span></label>
+        <label><input type="checkbox" data-f="bosses"><img class="ico" src="icons/spawn_boss.png" alt="">Боссы<span class="n" data-n="bosses"></span></label>
       </div>
-      <div class="caption">Спавны</div>
-    </section>
-    <section class="group">
-      <div class="items grid">
+      <h4>Прочее</h4>
+      <div class="grid2">
         <label><input type="checkbox" data-f="locks"><img class="ico" src="icons/lock.png" alt="">Замки<span class="n" data-n="locks"></span></label>
         <label><input type="checkbox" data-f="switches"><img class="ico" src="icons/switch.png" alt="">Рубильники<span class="n" data-n="switches"></span></label>
         <label><input type="checkbox" data-f="hazards"><img class="ico" src="icons/hazard.png" alt="">Опасные зоны<span class="n" data-n="hazards"></span></label>
         <label><input type="checkbox" data-f="weapons"><img class="ico" src="icons/stationarygun.png" alt="">Пулемёты<span class="n" data-n="weapons"></span></label>
-        <label><input type="checkbox" data-f="bosses"><img class="ico" src="icons/spawn_boss.png" alt="">Боссы<span class="n" data-n="bosses"></span></label>
         <label><input type="checkbox" data-f="btr"><span class="sw btr">БТР</span>Остановки БТР<span class="n" data-n="btr"></span></label>
+        <label><input type="checkbox" data-f="quests"><span class="sw" style="background:var(--quest)"></span>Задания</label>
       </div>
-      <div class="caption">Прочее</div>
     </section>
-  </div>
 
-  <div class="pane" data-pane="quests">
-    <section class="group">
-      <div class="items col">
-        <label><input type="checkbox" data-f="quests"><span class="sw" style="background:var(--quest)"></span>Показывать на карте</label>
-        <label title="Взятые и ещё не сданные задания — по логам игры за сохранённые сессии"><input type="checkbox" data-f="quests_active">Только активные</label>
-      </div>
-      <div class="caption">Карта</div>
-    </section>
-    <section class="group">
-      <div class="items col">
+    <section class="ppane" data-pane="quests">
+      <div class="row">
         <input id="quest-q" type="search" placeholder="Название задания" spellcheck="false">
-        <div class="row">
-          <button id="quests-all" title="Отметить все задания в списке">Все</button>
-          <button id="quests-none" title="Снять все задания в списке">Ничего</button>
-        </div>
+        <button id="quests-all" title="Отметить все задания в списке">Все</button>
+        <button id="quests-none" title="Снять все задания в списке">Ничего</button>
       </div>
-      <div class="caption">Список</div>
-    </section>
-    <section class="group">
-      <div class="items col">
-        <span id="quest-sum" class="muted"></span>
-        <span class="muted" title="Задания, взятые раньше самой старой сохранённой сессии логов, не видны">Взятые и сданные — по логам игры</span>
+      <div class="row">
+        <label title="Взятые и ещё не сданные задания — по логам игры за сохранённые сессии"><input type="checkbox" data-f="quests_active">Только активные</label>
+        <label><input type="checkbox" data-f="quests">На карте</label>
       </div>
-      <div class="caption">Состояние</div>
+      <div id="quest-sum" class="muted"></div>
+      <div id="quests"></div>
     </section>
-  </div>
 
-  <div class="pane" data-pane="settings">
-    <section class="group">
-      <div class="items paths">
-        <label>Игра (папка с Logs)<input id="game-dir" spellcheck="false"></label>
-        <label>Скриншоты<input id="shots-dir" spellcheck="false"></label>
-        <button id="save-paths">Сохранить</button>
+    <section class="ppane" data-pane="presets">
+      <p class="muted">Набор запоминает все флажки слоёв. Выбрать набор — в списке вверху окна программы или здесь.</p>
+      <div class="row">
+        <input id="preset-name" placeholder="Название набора, например «Рейд»" spellcheck="false" maxlength="40">
+        <button id="preset-save">Сохранить текущие</button>
       </div>
-      <div class="caption">Пути — пустое поле значит «искать автоматически»</div>
+      <div id="preset-result" class="muted"></div>
+      <div id="preset-list"></div>
     </section>
-    <section class="group">
-      <div class="items col">
-        <span id="data-date" class="muted"></span>
-        <span class="muted" title="Новые данные придут с новой версией программы">Встроены в программу</span>
-        <span id="settings-result" class="muted"></span>
-      </div>
-      <div class="caption">Данные</div>
-    </section>
-    <section class="group">
-      <div class="items col about">
-        <span id="version">Tarkov Map</span>
-        <span>Карты: the-hideout / tarkov.dev, CC BY-NC-SA 4.0.</span>
-        <span>Данные: tarkov.dev</span>
-        <span>Значки: the-hideout / tarkov.dev, MIT.</span>
-      </div>
-      <div class="caption">О программе</div>
-    </section>
-  </div>
-</header>
 
-<main id="view">
-  <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
-  <aside id="quests" hidden></aside>
+    <section class="ppane" data-pane="app">
+      <h4>Пути — пустое поле значит «искать автоматически»</h4>
+      <label class="field">Игра (папка с Logs)<input id="game-dir" spellcheck="false"></label>
+      <label class="field">Скриншоты<input id="shots-dir" spellcheck="false"></label>
+      <div class="row"><button id="save-paths">Сохранить</button><span id="settings-result" class="muted"></span></div>
+      <h4>Данные</h4>
+      <div id="data-date" class="muted"></div>
+      <div class="muted" title="Новые данные придут с новой версией программы">Встроены в программу</div>
+      <h4>О программе</h4>
+      <div class="about">
+        <div id="version">Tarkov Map</div>
+        <div>Карты: the-hideout / tarkov.dev, CC BY-NC-SA 4.0.</div>
+        <div>Данные: tarkov.dev</div>
+        <div>Значки: the-hideout / tarkov.dev, MIT.</div>
+      </div>
+    </section>
+  </aside>
+
   <div id="card" hidden><button class="close" title="Закрыть (Esc)">×</button><div class="title"></div><div class="body"></div></div>
   <div id="msg" hidden></div>
 </main>

@@ -376,6 +376,26 @@ func (a *App) SetHiddenTasks(ids []string) error {
 	return a.updateSettings(func(s *settings.Settings) { s.HiddenTasks = ids })
 }
 
+// SetPresets сохраняет наборы слоёв: имя без пробелов по краям, без имени — не набор,
+// у одинаковых имён остаётся последний (на месте первого).
+func (a *App) SetPresets(presets []settings.Preset) error {
+	var out []settings.Preset
+	at := map[string]int{}
+	for _, p := range presets {
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			continue
+		}
+		if i, ok := at[p.Name]; ok {
+			out[i] = p
+			continue
+		}
+		at[p.Name] = len(out)
+		out = append(out, p)
+	}
+	return a.updateSettings(func(s *settings.Settings) { s.Presets = out })
+}
+
 // SetPaths сохраняет ручные пути ("" — автопоиск) и перезапускает слежение.
 func (a *App) SetPaths(gameDir, shotsDir string) error {
 	if err := a.updateSettings(func(s *settings.Settings) {

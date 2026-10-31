@@ -17,8 +17,15 @@ type Settings struct {
 	Side              string          // "pmc" | "scav"
 	Filters           map[string]bool // ключи задаёт фронтенд
 	LootQuery         string          // строка поиска лута на земле
-	HiddenTasks       []string        // id заданий, снятых во вкладке «Задания»
+	HiddenTasks       []string        // id заданий, снятых в списке заданий
+	Presets           []Preset        // наборы слоёв, сохранённые пользователем
 	Window            *WindowPos
+}
+
+// Preset — набор флажков слоёв под своим названием.
+type Preset struct {
+	Name    string
+	Filters map[string]bool
 }
 
 const fileName = "settings.json"

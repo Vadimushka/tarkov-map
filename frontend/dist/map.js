@@ -16,20 +16,24 @@ window.TMap = (() => {
   const base = el("g", {}, svg);
   const overlay = el("g", {}, svg);
   const content = el("g", {}, overlay); // вкладка «Лут и места» — под выходами и маршрутом
-  // порядок — снизу вверх: путь поверх выходов, текущее место поверх всего
+  // порядок — снизу вверх: зоны выходов под значками, путь поверх выходов, текущее место поверх всего
   const groups = {};
-  for (const k of ["transit", "extract_other", "extract_shared", "extract_own", "trail", "position"]) groups[k] = el("g", {}, overlay);
+  for (const k of ["zone", "transit", "extract_other", "extract_shared", "extract_own", "trail", "position"]) groups[k] = el("g", {}, overlay);
+  const flashG = el("g", {}, overlay); // кольцо «вот здесь» после ссылки «показать»
 
   let R = null;          // прямоугольник карты в координатах вида
   let vb = null;         // текущий viewBox
   let floorGroups = [];  // этажи внутри SVG
   let baseLayer = "", floor = "";
   let layerIds = new Set(); // этажи кроме базового
-  let markers = [];      // выходы и переходы последней отрисовки — для вписывания
+  let floorOrder = [];   // этажи снизу вверх — для Ctrl + колесо
+  let markers = [];      // выходы и переходы последней отрисовки — для вписывания и карточек
   let pins = [];         // группы меток в пикселях экрана: {g, x, y}
   let upp = 1;           // единиц карты на пиксель экрана
+  let onFloorCb = null;  // смена этажа из карты (Ctrl + колесо, «показать»): app.js отмечает её в ленте
 
   const FACTION = { pmc: "ЧВК", scav: "Дикие", shared: "Совместный" };
+  const EXIT = { pmc: "Выход ЧВК", scav: "Выход Диких", shared: "Совместный выход" };
 
   function showTip(ev, text) {
     tip.style.display = "block";
@@ -42,9 +46,95 @@ window.TMap = (() => {
     tip.style.left = x + "px";
     tip.style.top = y + "px";
   }
-  function hover(node, text) {
-    node.addEventListener("mousemove", (ev) => showTip(ev, text));
-    node.addEventListener("mouseleave", () => (tip.style.display = "none"));
+  // zone — контур выхода или перехода: виден, пока мышь над значком или открыта его карточка
+  function hover(node, text, zone) {
+    node.addEventListener("mousemove", (ev) => {
+      showTip(ev, text);
+      if (zone) zone.style.display = "";
+    });
+    node.addEventListener("mouseleave", () => {
+      tip.style.display = "none";
+      if (zone && zone !== pinnedZone) zone.style.display = "none";
+    });
+  }
+
+  // --- карточка по клику ---
+  // spec: {title, sub, lines: [строка], links: [{head, items: [{text, x, y, layer}]}], key, zone}
+  const card = document.getElementById("card");
+  const onClick = new WeakMap(); // метка → действие по клику
+  let cardAt = null;     // точка карты, к которой привязана карточка
+  let cardKey = "";      // выход в карточке: после перерисовки вида снова показать его зону
+  let pinnedZone = null; // зона, которую держит открытая карточка
+
+  function openCard(spec, x, y) {
+    closeCard();
+    cardAt = { x, y };
+    cardKey = spec.key || "";
+    pinnedZone = spec.zone || null;
+    if (pinnedZone) pinnedZone.style.display = "";
+    card.querySelector(".title").textContent = spec.title;
+    const body = card.querySelector(".body");
+    body.replaceChildren();
+    const add = (cls, text) => {
+      const d = document.createElement("div");
+      if (cls) d.className = cls;
+      d.textContent = text;
+      body.appendChild(d);
+      return d;
+    };
+    if (spec.sub) add("sub", spec.sub);
+    for (const l of spec.lines || []) add("", l);
+    for (const sec of spec.links || []) {
+      if (!sec.items.length) continue;
+      add("head", sec.head);
+      for (const it of sec.items) {
+        const row = add("lnk", it.text);
+        row.title = "Показать на карте";
+        row.addEventListener("click", () => showPoint(it.x, it.y, it.layer));
+      }
+    }
+    card.hidden = false;
+    positionCard();
+  }
+
+  function closeCard() {
+    card.hidden = true;
+    if (pinnedZone) pinnedZone.style.display = "none";
+    pinnedZone = null;
+    cardAt = null;
+    cardKey = "";
+  }
+  card.querySelector(".close").addEventListener("click", closeCard);
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeCard();
+  });
+
+  // карточка справа от метки (у края — слева) и едет вместе с картой
+  function positionCard() {
+    if (card.hidden || !cardAt || !vb || !svg.clientWidth) return;
+    const k = svg.clientWidth / vb.w, w = card.offsetWidth, h = card.offsetHeight;
+    let x = (cardAt.x - vb.x) * k + 16;
+    const y = (cardAt.y - vb.y) * k - 14;
+    if (x + w > svg.clientWidth - 4 && x - 32 - w >= 4) x -= 32 + w;
+    card.style.left = x + "px";
+    card.style.top = Math.min(Math.max(4, y), svg.clientHeight - h - 4) + "px";
+  }
+
+  // showPoint — ссылка «показать»: этаж точки, центр на ней (с дальнего вида — с приближением,
+  // иначе центрировать некуда) и кольцо на пару секунд
+  const flashes = [];
+  function showPoint(x, y, layer) {
+    if (layer && layer !== floor && onFloorCb) onFloorCb(layer);
+    if (sized() && vb.w > fullView().w / 2.5) zoomAt(x, y, fullView().w / 3 / vb.w, true);
+    else centerOn(x, y);
+    const p = { g: el("g", { class: "flash" }, flashG), x, y };
+    el("circle", { r: 18 }, p.g);
+    flashes.push(p);
+    place(p);
+    setTimeout(() => {
+      p.g.remove();
+      flashes.splice(flashes.indexOf(p), 1);
+    }, 1800);
   }
 
   // pin — группа в точке карты, её содержимое задаётся в пикселях экрана
@@ -60,16 +150,19 @@ window.TMap = (() => {
   // Слой строится, только когда включён (на Улицах ≈2500 меток), и пересчитывается при
   // масштабе, только пока виден (CSS-переменная масштаба на весь слой оказалась медленнее
   // обхода атрибутов). Подсказки — одна пара обработчиков на все слои.
-  const LAYERS = ["hazards", "places", "c_misc", "c_body", "c_cache", "c_tech", "c_med", "c_safe", "c_weapon",
-    "loot_all", "locks", "switches", "weapons", "bosses", "loot_hit"];
-  const layers = {}; // ключ → {g, pins, built, on, upp}
-  for (const k of LAYERS) layers[k] = { g: el("g", { style: "display:none" }, content), pins: [], built: false, on: false, upp: 0 };
+  const LAYERS = ["hazards", "places", "spawn_scav", "spawn_sniper", "spawn_pmc", "c_misc", "c_body", "c_cache", "c_tech",
+    "c_med", "c_safe", "c_weapon", "loot_all", "locks", "switches", "weapons", "btr", "bosses", "loot_hit"];
+  // ключ → {g, pins, built, on, upp, cg (кружки группировки), cpins, cupp, cfloor}
+  const layers = {};
+  for (const k of LAYERS) layers[k] = { g: el("g", { style: "display:none" }, content), pins: [], built: false, on: false, upp: 0, cpins: [] };
   const tipOf = new WeakMap(); // метка → () => текст подсказки
   let data = null;             // MapContent текущей карты
   let lootHits = null;         // Set индексов совпавших точек лута; null — поиска нет
 
   const LOCK = { door: "Дверь", trunk: "Багажник" };
   const HAZARD = { minefield: "Минное поле", sniper: "Зона снайпера" };
+  const SPAWN = { pmc: "Спавн ЧВК", scav: "Спавн Диких", sniper: "Спавн снайпера" };
+  const GROUP = { weapon: "Оружейный", med: "Медицина", tech: "Техника", safe: "Сейф или касса", cache: "Тайник", body: "Тело", misc: "Сумка и прочее" };
   const pct = (x) => Math.round(x * 100) + "%";
 
   content.addEventListener("mousemove", (ev) => {
@@ -79,6 +172,16 @@ window.TMap = (() => {
     else tip.style.display = "none";
   });
   content.addEventListener("mouseleave", () => (tip.style.display = "none"));
+
+  // клик без сдвига карты: по метке — её действие (карточка, приближение), мимо — закрыть карточку
+  let dragged = false;
+  svg.addEventListener("click", (ev) => {
+    if (dragged) return;
+    let n = ev.target;
+    while (n && n !== svg && !onClick.has(n)) n = n.parentNode;
+    if (n && n !== svg) onClick.get(n)();
+    else closeCard();
+  });
 
   // значки tarkov.dev (MIT, the-hideout/tarkov-dev): 24 px на экране при любом масштабе, как у них
   const ICON = 24;
@@ -99,12 +202,50 @@ window.TMap = (() => {
     return el("image", { href: "icons/" + name + ".png", x: -ICON / 2, y: -ICON / 2, width: ICON, height: ICON }, parent);
   }
 
-  function cpin(L, x, y, layer, tipFn) {
-    const p = { g: el("g", { "data-layer": layer }, L.g), x, y };
+  // cpin — метка слоя; cardFn — содержимое карточки по клику
+  function cpin(L, x, y, layer, tipFn, cardFn) {
+    const p = { g: el("g", { "data-layer": layer }, L.g), x, y, layer };
     L.pins.push(p);
     place(p);
     if (tipFn) tipOf.set(p.g, tipFn);
+    if (cardFn) onClick.set(p.g, () => openCard(cardFn(), x, y));
     return p.g;
+  }
+  const at = (o) => ({ text: o.Name, x: o.PX, y: o.PY, layer: o.Layer }); // ссылка «показать»
+
+  // спавн — ромб цвета стороны, у снайпера с прицелом
+  function spawnMark(g, kind) {
+    const color = css("--" + kind);
+    el("path", { d: "M0,-7 L7,0 L0,7 L-7,0 Z", fill: color, stroke: "rgba(0,0,0,.85)", "stroke-width": 1.5 }, g);
+    if (kind === "sniper") el("circle", { r: 2.5, fill: "none", stroke: "#000", "stroke-width": 1.5 }, g);
+  }
+  function btrMark(g) {
+    el("rect", { x: -12, y: -7.5, width: 24, height: 15, rx: 3, fill: "#4f5d3a", stroke: "#fff", "stroke-width": 1.2 }, g);
+    el("text", { y: 3.2, "text-anchor": "middle", fill: "#fff", "font-size": 8.5, "font-weight": 700 }, g).textContent = "БТР";
+  }
+
+  // рубильник: что включает его, что включает он сам и какие выходы ждут его
+  function switchCard(s) {
+    const byId = (id) => data.Switches.find((o) => o.ID === id);
+    const opens = s.Activates.map(byId).filter(Boolean);
+    const other = s.Activates.length - opens.length; // двери и прочее без своей метки
+    return {
+      title: s.Name, sub: "Рубильник",
+      lines: other ? [`Открывает ещё ${other} ${plural(other, "объект", "объекта", "объектов")} без метки`] : [],
+      links: [
+        { head: "Сначала включить", items: data.Switches.filter((o) => o.Activates.includes(s.ID)).map(at) },
+        { head: "Включает", items: opens.map(at) },
+        { head: "Открывает выходы", items: markers.filter((m) => m.Kind === "extract" && m.Switches.includes(s.ID)).map(at) },
+      ],
+    };
+  }
+
+  // 1 метка, 3 метки, 5 меток
+  function plural(n, one, few, many) {
+    const d = n % 10, dd = n % 100;
+    if (d === 1 && dd !== 11) return one;
+    if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return few;
+    return many;
   }
 
   // поиск: без регистра, «ё» = «е», подстрока в полном или кратком названии, от 2 символов
@@ -122,21 +263,26 @@ window.TMap = (() => {
     });
   }
 
-  function lootTip(pt) {
-    if (data.ItemsMissing) return "Может появиться:\nназвания предметов не загружены";
+  // lootLines — что может появиться в точке, найденное поиском первым; не больше max строк
+  function lootLines(pt, max) {
+    if (data.ItemsMissing) return ["названия предметов не загружены"];
     const items = pt.Items.map((id) => data.Items[id]).filter(Boolean);
     const names = [...items.filter(matches), ...items.filter((n) => !matches(n))].map((n) => n.Name);
-    if (!names.length) return "Может появиться:\nназвания этих предметов неизвестны";
-    const lines = names.slice(0, 8);
-    if (names.length > 8) lines.push(`ещё ${names.length - 8}`);
-    return ["Может появиться:", ...lines].join("\n");
+    if (!names.length) return ["названия этих предметов неизвестны"];
+    const lines = names.slice(0, max);
+    if (names.length > max) lines.push(`ещё ${names.length - max}`);
+    return lines;
   }
+  const lootTip = (pt) => ["Может появиться:", ...lootLines(pt, 8)].join("\n");
+  const lootCard = (pt) => ({ title: "Лут на земле", sub: "Может появиться:", lines: lootLines(pt, 30) });
 
   function build(key) {
     const L = layers[key];
     tip.style.display = "none"; // метка под курсором могла исчезнуть, а mousemove не придёт
     L.g.replaceChildren();
     L.pins = [];
+    L.cpins = [];
+    L.cg = null;
     L.built = true;
     L.upp = upp;
     if (!data || !R) return;
@@ -150,7 +296,8 @@ window.TMap = (() => {
       const color = css("--" + key.replace("_", "-")) || css("--c-misc");
       for (const c of data.Containers) {
         if ("c_" + c.Group !== key) continue;
-        const g = cpin(L, c.PX, c.PY, c.Layer, () => c.Name), ic = containerIcon(c.Type);
+        const g = cpin(L, c.PX, c.PY, c.Layer, () => c.Name, () => ({ title: c.Name, sub: "Контейнер · " + (GROUP[c.Group] || GROUP.misc) }));
+        const ic = containerIcon(c.Type);
         if (ic) icon(ic, g);
         else el("circle", { r: 5, fill: color, stroke: "rgba(0,0,0,.8)", "stroke-width": 1 }, g);
       }
@@ -159,24 +306,35 @@ window.TMap = (() => {
       const color = css("--loot-hit");
       data.Loot.forEach((pt, i) => {
         if (hit !== !!(lootHits && lootHits.has(i))) return;
-        const g = cpin(L, pt.PX, pt.PY, pt.Layer, () => lootTip(pt));
+        const g = cpin(L, pt.PX, pt.PY, pt.Layer, () => lootTip(pt), () => lootCard(pt));
         if (hit) el("circle", { r: ICON / 2 + 3, fill: "none", stroke: color, "stroke-width": 3 }, g);
         icon("loose_loot", g);
       });
     } else if (key === "locks") {
       for (const l of data.Locks) {
-        const text = [LOCK[l.Kind] || "Замок", l.Key ? "ключ: " + l.Key : "ключ неизвестен"];
+        const kind = LOCK[l.Kind] || "Замок", need = l.Key ? "ключ: " + l.Key : "ключ неизвестен";
+        const text = [kind, need];
         if (l.NeedsPower) text.push("нужно питание");
-        icon("lock", cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · ")));
+        const lines = [need[0].toUpperCase() + need.slice(1)];
+        if (l.NeedsPower) lines.push("Нужно питание");
+        icon("lock", cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · "), () => ({ title: kind, lines })));
       }
     } else if (key === "switches") {
-      for (const s of data.Switches) icon("switch", cpin(L, s.PX, s.PY, s.Layer, () => s.Name));
+      for (const s of data.Switches) icon("switch", cpin(L, s.PX, s.PY, s.Layer, () => s.Name, () => switchCard(s)));
     } else if (key === "weapons") {
-      for (const w of data.Weapons) icon("stationarygun", cpin(L, w.PX, w.PY, w.Layer, () => w.Name));
+      for (const w of data.Weapons) icon("stationarygun", cpin(L, w.PX, w.PY, w.Layer, () => w.Name, () => ({ title: w.Name, sub: "Стационарное оружие" })));
     } else if (key === "bosses") {
       for (const b of data.Bosses) {
-        icon("spawn_boss", cpin(L, b.PX, b.PY, b.Layer, () => `${b.Name} · появляется в ${pct(b.Chance)} рейдов · это место — ${pct(b.SpotChance)}`));
+        icon("spawn_boss", cpin(L, b.PX, b.PY, b.Layer, () => `${b.Name} · появляется в ${pct(b.Chance)} рейдов · это место — ${pct(b.SpotChance)}`,
+          () => ({ title: b.Name, sub: "Босс", lines: [`Появляется в ${pct(b.Chance)} рейдов`, `Это место — ${pct(b.SpotChance)}`] })));
       }
+    } else if (key.startsWith("spawn_")) {
+      const kind = key.slice(6), name = SPAWN[kind];
+      for (const s of data.Spawns) {
+        if (s.Kind === kind) spawnMark(cpin(L, s.PX, s.PY, s.Layer, () => name, () => ({ title: name })), kind);
+      }
+    } else if (key === "btr") {
+      for (const b of data.BTR) btrMark(cpin(L, b.PX, b.PY, b.Layer, () => "Остановка БТР · " + b.Name, () => ({ title: b.Name, sub: "Остановка БТР" })));
     } else if (key === "hazards") {
       for (const h of data.Hazards) {
         const color = css(h.Kind === "sniper" ? "--sniper" : "--hazard"), text = () => HAZARD[h.Kind] || "Опасная зона";
@@ -193,6 +351,73 @@ window.TMap = (() => {
       }
     }
     dimNodes(L.g);
+    cluster(key);
+  }
+
+  // --- группировка: метки ближе CLUSTER_PX на экране сливаются в кружок с числом ---
+  // Только своего этажа (чужие скрыты); на предельном приближении — все метки по отдельности.
+  // Пересобирается после масштаба (с задержкой: колесо крутят несколькими щелчками) и смены этажа.
+  const CLUSTER_PX = 22;
+  const CLUSTERED = new Set(["c_misc", "c_body", "c_cache", "c_tech", "c_med", "c_safe", "c_weapon", "loot_all"]);
+
+  function cluster(key) {
+    const L = layers[key];
+    if (!CLUSTERED.has(key) || !L.built) return;
+    if (L.cg) L.cg.remove();
+    L.cg = el("g", {}, L.g);
+    L.cpins = [];
+    L.cupp = upp;
+    L.cfloor = floor;
+    for (const p of L.pins) p.g.classList.remove("clustered");
+    if (!vb || !sized() || vb.w <= (fullView().w / MAX_ZOOM) * 1.001) return;
+    // жадно по сетке: метка входит в первую группу, чей центр ближе d, иначе начинает свою
+    const d = CLUSTER_PX * upp, cells = new Map(), found = [];
+    for (const p of L.pins) {
+      if (p.layer !== floor) continue;
+      const cx = Math.floor(p.x / d), cy = Math.floor(p.y / d);
+      let into = null;
+      for (let i = -1; i <= 1 && !into; i++) {
+        for (let j = -1; j <= 1 && !into; j++) {
+          into = (cells.get(cx + i + "," + (cy + j)) || []).find((c) => Math.hypot(c.x - p.x, c.y - p.y) < d) || null;
+        }
+      }
+      if (into) {
+        into.m.push(p);
+        continue;
+      }
+      const c = { x: p.x, y: p.y, m: [p] }, k = cx + "," + cy;
+      found.push(c);
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push(c);
+    }
+    const color = key === "loot_all" ? css("--accent") : css("--" + key.replace("_", "-"));
+    for (const c of found) {
+      if (c.m.length < 2) continue;
+      let sx = 0, sy = 0;
+      for (const p of c.m) {
+        p.g.classList.add("clustered");
+        sx += p.x;
+        sy += p.y;
+      }
+      const n = c.m.length, p = { g: el("g", { class: "cluster" }, L.cg), x: sx / n, y: sy / n };
+      L.cpins.push(p);
+      place(p);
+      el("circle", { r: n > 99 ? 13 : 11, fill: "rgba(20,19,15,.88)", stroke: color, "stroke-width": 2 }, p.g);
+      el("text", { y: 4, "text-anchor": "middle" }, p.g).textContent = n;
+      tipOf.set(p.g, () => `${n} ${plural(n, "метка", "метки", "меток")} рядом — щёлкните, чтобы приблизить`);
+      onClick.set(p.g, () => zoomAt(p.x, p.y, 1 / 3, true));
+    }
+  }
+
+  let clusterTimer = 0;
+  function reclusterSoon() {
+    clearTimeout(clusterTimer);
+    clusterTimer = setTimeout(() => {
+      for (const k of CLUSTERED) {
+        const L = layers[k];
+        if (L.on && L.built && (L.cupp !== upp || L.cfloor !== floor)) cluster(k);
+      }
+    }, 120);
   }
 
   function show(key, on) {
@@ -201,16 +426,21 @@ window.TMap = (() => {
     if (on && !L.built) build(key);
     else if (on && L.upp !== upp) {
       L.pins.forEach(place);
+      L.cpins.forEach(place);
       L.upp = upp;
     }
+    if (on && L.built && CLUSTERED.has(key) && (L.cupp !== upp || L.cfloor !== floor)) cluster(key);
     L.g.style.display = on ? "" : "none";
   }
 
   function resetContent() {
+    closeCard();
     for (const k of LAYERS) {
       const L = layers[k];
       L.g.replaceChildren();
       L.pins = [];
+      L.cpins = [];
+      L.cg = null;
       L.built = false;
     }
   }
@@ -238,6 +468,8 @@ window.TMap = (() => {
       const L = layers[k];
       L.g.replaceChildren();
       L.pins = [];
+      L.cpins = [];
+      L.cg = null;
       L.built = false;
     }
     show("loot_hit", !!lootHits);
@@ -285,11 +517,22 @@ window.TMap = (() => {
     }
     baseLayer = layers.length ? layers[0].ID : "";
     layerIds = new Set(layers.slice(1).map((l) => l.ID));
+    floorOrder = layers.map((l, i) => ({ id: l.ID, lv: i ? floorLevel(l.Name) : 1, i }))
+      .sort((a, b) => a.lv - b.lv || a.i - b.i).map((x) => x.id);
     floor = baseLayer;
     markers = [];
     data = null;
     resetContent();
     vb = null; // вписать после первой отрисовки меток
+  }
+
+  // floorLevel — высота этажа для порядка снизу вверх (базовый слой — 1). В данных этажи
+  // идут не по высоте, а диапазоны высот у разных зданий одного этажа разные — порядок по имени.
+  function floorLevel(name) {
+    const m = /^(\d+)(st|nd|rd|th) Floor$/i.exec(name || "");
+    if (m) return +m[1];
+    if (/^(Underground|Basement|Bunkers|Tunnels|Garage|Technical)/i.test(name || "")) return 0;
+    return 1.5;
   }
 
   function clear() {
@@ -302,6 +545,7 @@ window.TMap = (() => {
     markers = [];
     pins = [];
     floorGroups = [];
+    floorOrder = [];
   }
 
   function extractGroup(m, side) {
@@ -345,19 +589,21 @@ window.TMap = (() => {
     for (const m of view.Markers) {
       if (m.Kind === "extract") {
         const color = css("--" + m.Faction) || css("--shared");
-        const g = pin(groups[extractGroup(m, side)], m.PX, m.PY, m.Layer);
+        const g = pin(groups[extractGroup(m, side)], m.PX, m.PY, m.Layer), key = "x:" + m.Name, zone = zoneOf(m, color, key);
         el("rect", { x: -6, y: -6, width: 12, height: 12, rx: 2.5, fill: color, stroke: "#fff", "stroke-width": 1.5 }, g);
         label(g, m.Name + (m.Paid ? " ₽" : "") + (m.Switch ? " ⚡" : ""), color);
         const cond = [];
-        if (m.Paid) cond.push("платный: нужны деньги или предмет");
+        if (m.Paid) cond.push(m.Need ? "плата: " + m.Need : "платный: нужны деньги или предмет");
         if (m.Switch) cond.push("сначала включить рубильник");
-        hover(g, [m.Name, FACTION[m.Faction] || m.Faction, ...cond].join(" · "));
+        hover(g, [m.Name, FACTION[m.Faction] || m.Faction, ...cond].join(" · "), zone);
+        onClick.set(g, () => openCard(exitCard(m, key, zone), m.PX, m.PY));
       } else if (m.Kind === "transit") {
         const color = css("--transit");
-        const g = pin(groups.transit, m.PX, m.PY, m.Layer);
+        const g = pin(groups.transit, m.PX, m.PY, m.Layer), key = "t:" + m.Name, zone = zoneOf(m, color, key);
         el("circle", { r: 6.5, fill: color, stroke: "#fff", "stroke-width": 1.5 }, g);
         label(g, m.Name, color);
-        hover(g, m.Name + " · переход на другую карту");
+        hover(g, m.Name + " · переход на другую карту", zone);
+        onClick.set(g, () => openCard({ key, zone, title: m.Name, sub: "Переход на другую карту" }, m.PX, m.PY));
       }
     }
 
@@ -386,14 +632,38 @@ window.TMap = (() => {
       el("circle", { r: last ? 7 : 4.5, fill: last ? red : "#fff", stroke: last ? "#fff" : red, "stroke-width": 2 }, g);
       if (last) {
         hover(g, `Я здесь · скрин в ${s.Time}`);
+        onClick.set(g, () => openCard({ title: "Я здесь", sub: "Скрин в " + s.Time }, s.PX, s.PY));
         return;
       }
       const t = el("text", { y: -9, fill: "#fff", "font-size": 11, "text-anchor": "middle", "paint-order": "stroke", stroke: "#000", "stroke-width": 3 }, g);
       t.textContent = i + 1;
       hover(g, `#${i + 1} · ${s.Time}`);
+      onClick.set(g, () => openCard({ title: `Точка пути №${i + 1}`, sub: "Скрин в " + s.Time }, s.PX, s.PY));
     });
     for (const k in groups) dimNodes(groups[k]); // слои меток перерисовка вида не трогает
     if (!vb) fit();
+  }
+
+  // zoneOf — скрытый контур зоны выхода или перехода; у открытой карточки — сразу виден
+  function zoneOf(m, color, key) {
+    if (m.Outline.length < 3) return null;
+    const zone = el("polygon", {
+      points: m.Outline.map((p) => p[0] + "," + p[1]).join(" "), "data-layer": m.Layer, style: "display:none",
+      fill: color, "fill-opacity": 0.18, stroke: color, "stroke-width": 2, "vector-effect": "non-scaling-stroke",
+    }, groups.zone);
+    if (key === cardKey) {
+      zone.style.display = "";
+      pinnedZone = zone;
+    }
+    return zone;
+  }
+
+  function exitCard(m, key, zone) {
+    const lines = [];
+    if (m.Paid) lines.push("Плата: " + (m.Need || "деньги или предмет"));
+    const sw = data ? m.Switches.map((id) => data.Switches.find((s) => s.ID === id)).filter(Boolean) : [];
+    if (m.Switch && !sw.length) lines.push("Сначала включить рубильник");
+    return { key, zone, title: m.Name, sub: EXIT[m.Faction] || "Выход", lines, links: [{ head: "Сначала включить", items: sw.map(at) }] };
   }
 
   function setFloor(id) {
@@ -414,6 +684,7 @@ window.TMap = (() => {
       g.classList.toggle("floor-dim", base && own);
     });
     dimNodes(overlay);
+    for (const k of CLUSTERED) if (layers[k].on && layers[k].built) cluster(k);
   }
 
   // метки чужого этажа приглушены; названия мест не приглушаются, а подпись не базового
@@ -455,14 +726,18 @@ window.TMap = (() => {
     if (u && u !== upp) {
       upp = u;
       pins.forEach(place);
+      flashes.forEach(place);
       for (const k of LAYERS) {
         const L = layers[k];
         if (L.on && L.built) {
           L.pins.forEach(place);
+          L.cpins.forEach(place);
           L.upp = upp;
         }
       }
+      reclusterSoon();
     }
+    positionCard();
   }
 
   // карта вместе с метками за её краем (переходы и выходы бывают снаружи) и полями 3 %
@@ -525,27 +800,52 @@ window.TMap = (() => {
     if (px < vb.x + mx || px > vb.x + vb.w - mx || py < vb.y + my || py > vb.y + vb.h - my) centerOn(px, py);
   }
 
-  svg.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    if (!vb || !sized()) return;
-    // множитель сразу в пределах масштаба, чтобы точка под курсором осталась на месте
-    const full = fullView(), w = Math.min(full.w, Math.max(full.w / MAX_ZOOM, vb.w * (e.deltaY > 0 ? 1.2 : 1 / 1.2)));
-    const k = w / vb.w;
-    if (k === 1) return;
+  // zoomAt меняет ширину вида в k раз (в пределах масштаба), точка (mx, my) остаётся на месте
+  function zoomAt(mx, my, k, center) {
+    const full = fullView(), w = Math.min(full.w, Math.max(full.w / MAX_ZOOM, vb.w * k));
+    k = w / vb.w;
+    if (k === 1 && !center) return;
     moved = true;
-    const mx = vb.x + (vb.w * e.offsetX) / svg.clientWidth, my = vb.y + (vb.h * e.offsetY) / svg.clientHeight;
-    vb = { x: mx - (mx - vb.x) * k, y: my - (my - vb.y) * k, w: vb.w * k, h: vb.h * k };
+    vb = center
+      ? { x: mx - (vb.w * k) / 2, y: my - (vb.h * k) / 2, w: vb.w * k, h: vb.h * k }
+      : { x: mx - (mx - vb.x) * k, y: my - (my - vb.y) * k, w: vb.w * k, h: vb.h * k };
     draw();
+  }
+
+  // Ctrl + колесо — этаж выше или ниже; тачпад шлёт десятки событий — не чаще раза в 200 мс
+  let floorWheelAt = 0;
+  function wheelFloor(e) {
+    const i = floorOrder.indexOf(floor), j = Math.min(floorOrder.length - 1, Math.max(0, i + (e.deltaY < 0 ? 1 : -1)));
+    if (i < 0 || j === i || e.timeStamp - floorWheelAt < 200) return;
+    floorWheelAt = e.timeStamp;
+    if (onFloorCb) onFloorCb(floorOrder[j]);
+    else setFloor(floorOrder[j]);
+  }
+
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault(); // и масштаб страницы по Ctrl + колесо в WebView2
+    if (!vb || !sized()) return;
+    // щипок на тачпаде приходит колесом с Ctrl и мелким шагом — это масштаб, а не этаж
+    if (e.ctrlKey && Math.abs(e.deltaY) >= 40) {
+      wheelFloor(e);
+      return;
+    }
+    // множитель сразу в пределах масштаба, чтобы точка под курсором осталась на месте
+    zoomAt(vb.x + (vb.w * e.offsetX) / svg.clientWidth, vb.y + (vb.h * e.offsetY) / svg.clientHeight, e.deltaY > 0 ? 1.2 : 1 / 1.2);
   }, { passive: false });
 
   let drag = null;
   svg.addEventListener("mousedown", (e) => {
     if (!vb || e.button !== 0) return;
     drag = { x: e.clientX, y: e.clientY, vb: { ...vb } };
+    dragged = false;
     svg.classList.add("drag");
   });
   addEventListener("mousemove", (e) => {
     if (!drag) return;
+    // дрожь руки при щелчке — не сдвиг: иначе клик по метке не открыл бы карточку
+    if (!dragged && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
+    dragged = true;
     moved = true;
     const s = vb.w / svg.clientWidth;
     vb = { ...drag.vb, x: drag.vb.x - (e.clientX - drag.x) * s, y: drag.vb.y - (e.clientY - drag.y) * s };
@@ -572,5 +872,7 @@ window.TMap = (() => {
     size = { w, h };
   }).observe(svg);
 
-  return { setSVG, clear, render, setContent, setLootQuery, lootHitsElsewhere, setFloor, setFilter, centerOn, keepInView, fit };
+  const onFloor = (fn) => (onFloorCb = fn);
+
+  return { setSVG, clear, render, setContent, setLootQuery, lootHitsElsewhere, setFloor, onFloor, setFilter, centerOn, keepInView, fit };
 })();

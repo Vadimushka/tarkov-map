@@ -35,6 +35,8 @@ body { display: flex; flex-direction: column; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .sw.trail { border-radius: 0; height: 0; border-top: 2px dashed var(--route); }
 .sw.txt { width: auto; height: auto; border-radius: 0; font-size: 10px; line-height: 1; color: var(--muted); }
+.sw.dia { width: 9px; height: 9px; border-radius: 1px; transform: rotate(45deg); margin: 0 1px; }
+.sw.btr { width: auto; height: auto; border-radius: 2px; background: #4f5d3a; color: #fff; font-size: 7.5px; font-weight: 700; line-height: 1; padding: 2px 2px; }
 .n { color: var(--muted); font-size: 11px; }
 .group label.empty { opacity: .45; }
 /* «Лут и места» шире «Главной»: уже отступы, контейнеры — 4 ряда в высоту трёх */
@@ -67,8 +69,8 @@ button:disabled { opacity: .4; cursor: default; }
 input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: 12px ui-monospace, monospace; }
 .muted { color: var(--muted); font-size: 12px; }
 
-/* двойной щелчок по карте не выделяет подписи */
-#view { flex: 1; position: relative; min-height: 0; user-select: none; }
+/* двойной щелчок по карте не выделяет подписи; карточка за краем карты обрезается */
+#view { flex: 1; position: relative; min-height: 0; user-select: none; overflow: hidden; }
 #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
 #map.drag { cursor: grabbing; }
 #map[hidden] { display: none; }
@@ -87,3 +89,23 @@ input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid
 #map.no-labels .lbl { display: none; }
 /* названия мест: приглушённые, мельче подписей выходов, мышь не перехватывают */
 .place text { font-size: 11.5px; font-weight: 500; fill: var(--place); paint-order: stroke; stroke: rgba(0,0,0,.75); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+
+/* метки по клику открывают карточку; кружок группы приближает */
+#map g[data-layer], #map .cluster { cursor: pointer; }
+.clustered { display: none; }
+.cluster text { fill: #fff; font-size: 11px; font-weight: 600; pointer-events: none; }
+.flash circle { fill: none; stroke: var(--accent); stroke-width: 3; transform-box: fill-box; transform-origin: center; animation: flash 1.8s ease-out forwards; pointer-events: none; }
+@keyframes flash { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
+
+#card { position: absolute; z-index: 5; width: 250px; max-height: calc(100% - 8px); overflow-y: auto; background: #1d1b16f2; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px 9px; box-shadow: 0 4px 16px #0008; user-select: text; scrollbar-width: thin; }
+#card[hidden] { display: none; }
+#card .title { font-weight: 600; color: #fff; padding-right: 18px; }
+#card .close { position: absolute; top: 4px; right: 4px; padding: 0 6px; line-height: 18px; border: none; background: none; color: var(--muted); font-size: 16px; }
+#card .close:hover { color: #fff; }
+#card .body > div { margin-top: 2px; }
+#card .sub { color: var(--muted); font-size: 12px; }
+#card .head { color: var(--muted); font-size: 11px; margin-top: 7px !important; text-transform: uppercase; letter-spacing: .03em; }
+#card .lnk { color: var(--accent); cursor: pointer; }
+#card .lnk::after { content: " · показать"; color: var(--muted); font-size: 11px; }
+#card .lnk:hover { text-decoration: underline; }

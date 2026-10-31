@@ -342,6 +342,7 @@ func parseMaps(src fs.FS, mapsName, ruName string) (map[string]GameMap, error) {
 	out := map[string]GameMap{}
 	for _, m := range raw.Data.Maps {
 		gm := GameMap{ID: m.ID, NormalizedName: m.NormalizedName, Name: tr(m.Name), ScenePath: m.ScenePath, RaidMinutes: m.RaidDuration}
+		var switchIDs []string // switch выхода, если это id рубильника
 		for _, e := range m.Extracts {
 			x := Extract{Name: tr(e.Name), Faction: e.Faction, Pos: e.Position, Switch: switchFlag(e.Switch),
 				Outline: e.Outline, Switches: e.Switches}
@@ -349,7 +350,11 @@ func parseMaps(src fs.FS, mapsName, ruName string) (map[string]GameMap, error) {
 				x.Paid, x.Item, x.ItemCount = true, e.TransferItem.Item, e.TransferItem.Count
 			}
 			gm.Extracts = append(gm.Extracts, x)
+			var id string
+			_ = json.Unmarshal(e.Switch, &id)
+			switchIDs = append(switchIDs, id)
 		}
+		dropSharedSwitches(gm.Extracts, switchIDs)
 		for _, t := range m.Transits {
 			gm.Transits = append(gm.Transits, Transit{Name: tr(t.Description), Pos: t.Position, Outline: t.Outline})
 		}
@@ -357,6 +362,41 @@ func parseMaps(src fs.FS, mapsName, ruName string) (map[string]GameMap, error) {
 		out[m.ScenePath] = gm
 	}
 	return out, nil
+}
+
+// dropSharedSwitches убирает рубильники, указанные у каждого выхода карты (от 5 выходов): так
+// в снимке выглядит ошибка данных — на Таможне у всех 28 выходов рубильник ZB-013, — а не
+// условие выхода. switchIDs[i] — поле switch i-го выхода, если там id.
+func dropSharedSwitches(ex []Extract, switchIDs []string) {
+	if len(ex) < 5 {
+		return
+	}
+	count := map[string]int{}
+	for _, e := range ex {
+		seen := map[string]bool{}
+		for _, id := range e.Switches {
+			if !seen[id] {
+				seen[id] = true
+				count[id]++
+			}
+		}
+	}
+	shared := map[string]bool{}
+	for id, n := range count {
+		shared[id] = n == len(ex)
+	}
+	for i := range ex {
+		var keep []string
+		for _, id := range ex[i].Switches {
+			if !shared[id] {
+				keep = append(keep, id)
+			}
+		}
+		ex[i].Switches = keep
+		if shared[switchIDs[i]] {
+			ex[i].Switch = len(keep) > 0
+		}
+	}
 }
 
 // switchFlag: выход требует рубильника, если switch == true или непустой id.

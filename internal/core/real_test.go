@@ -28,9 +28,11 @@ func TestDumpRealContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for scene, name := range map[string]string{
-		"maps/shopping_mall.bundle":    "interchange",
-		"maps/city_preset.bundle":      "streets-of-tarkov",
-		"maps/shoreline_preset.bundle": "shoreline",
+		"maps/shopping_mall.bundle":      "interchange",
+		"maps/city_preset.bundle":        "streets-of-tarkov",
+		"maps/shoreline_preset.bundle":   "shoreline",
+		"maps/woods_preset.bundle":       "woods",   // остановки БТР
+		"maps/rezerv_base_preset.bundle": "reserve", // рубильники со связями
 	} {
 		c := New(store)
 		c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, Bundle: scene})
@@ -52,8 +54,9 @@ func TestDumpRealContent(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(d, "map.svg"), []byte(svg), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("%s: подписей %d, контейнеров %d, лута %d, предметов %d (нет названий: %v), замков %d, зон %d, пулемётов %d, точек боссов %d",
-			name, len(m.Places), len(m.Containers), len(m.Loot), len(m.Items), m.ItemsMissing, len(m.Locks), len(m.Hazards), len(m.Weapons), len(m.Bosses))
+		t.Logf("%s: подписей %d, контейнеров %d, лута %d, предметов %d (нет названий: %v), замков %d, зон %d, пулемётов %d, точек боссов %d, спавнов %d, БТР %d",
+			name, len(m.Places), len(m.Containers), len(m.Loot), len(m.Items), m.ItemsMissing, len(m.Locks), len(m.Hazards), len(m.Weapons), len(m.Bosses),
+			len(m.Spawns), len(m.BTR))
 	}
 }
 

@@ -8,6 +8,7 @@
     // вкладка «Лут и места»: по умолчанию только названия мест
     places: true, c_weapon: false, c_med: false, c_tech: false, c_safe: false, c_cache: false, c_body: false, c_misc: false,
     loot_all: false, locks: false, switches: false, hazards: false, weapons: false, bosses: false,
+    spawn_pmc: false, spawn_scav: false, spawn_sniper: false, btr: false,
   };
   const MODE = { pve: "PvE", regular: "PvP" };
 
@@ -82,6 +83,7 @@
     document.querySelectorAll("[name=floor]").forEach((r) => (r.checked = r.value === id));
     showLootFound();
   }
+  TMap.onFloor(selectFloor); // Ctrl + колесо и ссылки «показать» в карточке
 
   // --- метки вкладки «Лут и места» ---
   function fillCounts(c) {
@@ -94,6 +96,8 @@
       n.hazards = c.Hazards.length;
       n.weapons = c.Weapons.length;
       n.bosses = new Set(c.Bosses.map((b) => b.Name)).size;
+      for (const s of c.Spawns) n["spawn_" + s.Kind] = (n["spawn_" + s.Kind] || 0) + 1;
+      n.btr = c.BTR.length;
     }
     document.querySelectorAll("[data-n]").forEach((s) => {
       const v = c ? n[s.dataset.n] || 0 : null;
@@ -177,7 +181,7 @@
       return true;
     }
     if (c.MapID !== v.MapID || c.Gen !== v.ContentGen) return false;
-    for (const k of ["Places", "Containers", "Loot", "Locks", "Switches", "Hazards", "Weapons", "Bosses"]) c[k] = c[k] || [];
+    for (const k of ["Places", "Containers", "Loot", "Locks", "Switches", "Hazards", "Weapons", "Bosses", "Spawns", "BTR"]) c[k] = c[k] || [];
     c.Items = c.Items || {};
     content = c;
     contentKey = key;

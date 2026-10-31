@@ -218,12 +218,14 @@ func fillContent(gm *GameMap, rc rawContent, refs rawRefs, tr func(string) strin
 	}
 }
 
-// spawnKinds: «all» — точка и ЧВК, и Диких; зона со «sniper» в имени — снайперская. Точки только
-// для боссов пропускаются: их показывает слой боссов с шансами.
+// spawnKinds: «all» — точка и ЧВК, и Диких; снайперская — с категорией sniper или зоной «snip…»
+// в имени (ZoneSniper, ZoneSnipeBrige). Точки только для боссов и событий (season01) пропускаются:
+// боссов показывает свой слой с шансами.
 func spawnKinds(sides, categories []string, zone string) []string {
-	people := false
+	people, sniper := false, strings.Contains(strings.ToLower(zone), "snip")
 	for _, c := range categories {
-		people = people || c == "player" || c == "bot" || c == "botpmc"
+		people = people || c == "player" || c == "bot" || c == "botpmc" || c == "sniper"
+		sniper = sniper || c == "sniper"
 	}
 	if !people {
 		return nil
@@ -234,7 +236,7 @@ func spawnKinds(sides, categories []string, zone string) []string {
 			out = append(out, "pmc")
 		}
 		if s == "scav" || s == "all" {
-			if strings.Contains(strings.ToLower(zone), "sniper") {
+			if sniper {
 				out = append(out, "sniper")
 			} else {
 				out = append(out, "scav")

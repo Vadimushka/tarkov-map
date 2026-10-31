@@ -38,7 +38,7 @@
       </div>
       <div class="caption">Показывать</div>
     </section>
-    <section class="group" id="floors-group" hidden>
+    <section class="group" id="floors-group" hidden title="Ctrl + колесо мыши над картой — этаж выше или ниже">
       <div class="items grid" id="floors"></div>
       <div class="caption">Этаж</div>
     </section>
@@ -86,11 +86,20 @@
     </section>
     <section class="group">
       <div class="items grid">
+        <label><input type="checkbox" data-f="spawn_pmc"><span class="sw dia" style="background:var(--pmc)"></span>ЧВК<span class="n" data-n="spawn_pmc"></span></label>
+        <label><input type="checkbox" data-f="spawn_scav"><span class="sw dia" style="background:var(--scav)"></span>Дикие<span class="n" data-n="spawn_scav"></span></label>
+        <label><input type="checkbox" data-f="spawn_sniper"><span class="sw dia" style="background:var(--sniper)"></span>Снайперы<span class="n" data-n="spawn_sniper"></span></label>
+      </div>
+      <div class="caption">Спавны</div>
+    </section>
+    <section class="group">
+      <div class="items grid">
         <label><input type="checkbox" data-f="locks"><img class="ico" src="icons/lock.png" alt="">Замки<span class="n" data-n="locks"></span></label>
         <label><input type="checkbox" data-f="switches"><img class="ico" src="icons/switch.png" alt="">Рубильники<span class="n" data-n="switches"></span></label>
         <label><input type="checkbox" data-f="hazards"><img class="ico" src="icons/hazard.png" alt="">Опасные зоны<span class="n" data-n="hazards"></span></label>
         <label><input type="checkbox" data-f="weapons"><img class="ico" src="icons/stationarygun.png" alt="">Пулемёты<span class="n" data-n="weapons"></span></label>
         <label><input type="checkbox" data-f="bosses"><img class="ico" src="icons/spawn_boss.png" alt="">Боссы<span class="n" data-n="bosses"></span></label>
+        <label><input type="checkbox" data-f="btr"><span class="sw btr">БТР</span>Остановки БТР<span class="n" data-n="btr"></span></label>
       </div>
       <div class="caption">Прочее</div>
     </section>
@@ -127,6 +136,7 @@
 
 <main id="view">
   <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="card" hidden><button class="close" title="Закрыть (Esc)">×</button><div class="title"></div><div class="body"></div></div>
   <div id="msg" hidden></div>
 </main>
 

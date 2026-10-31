@@ -2,6 +2,7 @@ package data
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -108,7 +109,7 @@ func TestLoadSpawnsBTRAndLinks(t *testing.T) {
 		kinds = append(kinds, sp.Kind)
 	}
 	// «all» — и ЧВК, и Дикие; спавн босса не дублирует слой боссов
-	if strings.Join(kinds, ",") != "pmc,scav,sniper,pmc,scav" {
+	if strings.Join(kinds, ",") != "pmc,scav,sniper,pmc,scav,sniper,sniper" {
 		t.Errorf("Spawns kinds = %v", kinds)
 	}
 	if len(m.BTRStops) != 1 || m.BTRStops[0].Name != "КПП USEC" || m.BTRStops[0].Pos != (mapgeo.Vec3{X: 7, Y: 1, Z: 8}) {
@@ -129,5 +130,19 @@ func TestLoadSpawnsBTRAndLinks(t *testing.T) {
 	if len(auto.Outline) != 3 || auto.Item != "5449016a4bdc2d6f028b456f" || auto.ItemCount != 20000 ||
 		strings.Join(auto.Switches, ",") != "sw_mall" {
 		t.Errorf("А-Выход у ТЭЦ = %+v", auto)
+	}
+}
+
+// На Таможне в снимке у всех 28 выходов один и тот же рубильник ZB-013 — ошибка данных:
+// рубильник, указанный у каждого выхода карты (от 5 выходов), не считается условием выхода.
+func TestSwitchOnEveryExtractIgnored(t *testing.T) {
+	s := loaded(t)
+	m, _ := s.MapByScene("maps/laboratory_preset.bundle")
+	got := []string{}
+	for _, e := range m.Extracts {
+		got = append(got, fmt.Sprintf("%s:%v:%s", e.Name, e.Switch, strings.Join(e.Switches, "/")))
+	}
+	if want := "l1:false:,l2:false:,l3:false:,l4:false:,l5:true:sw_gate"; strings.Join(got, ",") != want {
+		t.Errorf("выходы = %s, want %s", strings.Join(got, ","), want)
 	}
 }

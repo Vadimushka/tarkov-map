@@ -12,7 +12,10 @@
           {"position": {"x": 2, "y": 1, "z": 2}, "sides": ["scav"], "categories": ["bot"], "zoneName": "ZoneCenter"},
           {"position": {"x": 3, "y": 1, "z": 3}, "sides": ["scav"], "categories": ["bot"], "zoneName": "ZoneSniper_roof"},
           {"position": {"x": 4, "y": 1, "z": 4}, "sides": ["all"], "categories": ["player", "bot"], "zoneName": "z2"},
-          {"position": {"x": 5, "y": 1, "z": 5}, "sides": ["scav"], "categories": ["boss"], "zoneName": "ZoneBoss"}
+          {"position": {"x": 5, "y": 1, "z": 5}, "sides": ["scav"], "categories": ["boss"], "zoneName": "ZoneBoss"},
+          {"position": {"x": 6, "y": 1, "z": 6}, "sides": ["scav"], "categories": ["bot", "sniper"], "zoneName": "ZoneSnipeBrige"},
+          {"position": {"x": 7, "y": 1, "z": 7}, "sides": ["scav"], "categories": ["bot", "sniper"], "zoneName": "ZoneHill"},
+          {"position": {"x": 8, "y": 1, "z": 8}, "sides": ["scav"], "categories": ["season01"], "zoneName": "ZoneEvent"}
         ],
         "btrStops": [
           {"name": "Trading/Dialog/PlayerTaxi/Woods/p5/Name", "x": 7, "y": 1, "z": 8}
@@ -213,7 +216,13 @@
         "name": "5b0fc42d86f7744a585f9105 Name",
         "normalizedName": "the-lab",
         "scenePath": "maps/laboratory_preset.bundle",
-        "extracts": [],
+        "extracts": [
+          {"name": "l1", "faction": "pmc", "switch": "sw_power", "switches": ["sw_power"], "position": {"x": 1, "y": 0, "z": 1}},
+          {"name": "l2", "faction": "pmc", "switch": "sw_power", "switches": ["sw_power"], "position": {"x": 2, "y": 0, "z": 2}},
+          {"name": "l3", "faction": "pmc", "switch": "sw_power", "switches": ["sw_power"], "position": {"x": 3, "y": 0, "z": 3}},
+          {"name": "l4", "faction": "scav", "switch": "sw_power", "switches": ["sw_power"], "position": {"x": 4, "y": 0, "z": 4}},
+          {"name": "l5", "faction": "scav", "switch": "sw_power", "switches": ["sw_power", "sw_gate"], "position": {"x": 5, "y": 0, "z": 5}}
+        ],
         "transits": []
       }
     },

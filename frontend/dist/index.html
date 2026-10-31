@@ -10,6 +10,7 @@
   <nav class="tabs" role="tablist" title="Двойной щелчок по вкладке — свернуть или развернуть ленту">
     <button class="tab" role="tab" data-tab="main">Главная</button>
     <button class="tab" role="tab" data-tab="loot">Лут и места</button>
+    <button class="tab" role="tab" data-tab="quests">Задания</button>
     <button class="tab" role="tab" data-tab="settings">Настройки</button>
     <span class="spacer"></span>
     <select id="map-pick" title="Какую карту показывать. Ручной выбор действует, пока игра не загрузит следующую карту">
@@ -105,6 +106,33 @@
     </section>
   </div>
 
+  <div class="pane" data-pane="quests">
+    <section class="group">
+      <div class="items col">
+        <label><input type="checkbox" data-f="quests"><span class="sw" style="background:var(--quest)"></span>Показывать на карте</label>
+        <label title="Взятые и ещё не сданные задания — по логам игры за сохранённые сессии"><input type="checkbox" data-f="quests_active">Только активные</label>
+      </div>
+      <div class="caption">Карта</div>
+    </section>
+    <section class="group">
+      <div class="items col">
+        <input id="quest-q" type="search" placeholder="Название задания" spellcheck="false">
+        <div class="row">
+          <button id="quests-all" title="Отметить все задания в списке">Все</button>
+          <button id="quests-none" title="Снять все задания в списке">Ничего</button>
+        </div>
+      </div>
+      <div class="caption">Список</div>
+    </section>
+    <section class="group">
+      <div class="items col">
+        <span id="quest-sum" class="muted"></span>
+        <span class="muted" title="Задания, взятые раньше самой старой сохранённой сессии логов, не видны">Взятые и сданные — по логам игры</span>
+      </div>
+      <div class="caption">Состояние</div>
+    </section>
+  </div>
+
   <div class="pane" data-pane="settings">
     <section class="group">
       <div class="items paths">
@@ -136,6 +164,7 @@
 
 <main id="view">
   <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+  <aside id="quests" hidden></aside>
   <div id="card" hidden><button class="close" title="Закрыть (Esc)">×</button><div class="title"></div><div class="body"></div></div>
   <div id="msg" hidden></div>
 </main>

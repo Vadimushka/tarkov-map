@@ -51,6 +51,12 @@ type App struct {
 	loading           bool
 	dirty             bool
 
+	// задания по логам: режим → id → "start" | "fail" | "done"; всё до questsAt уже учёл
+	// разбор логов на старте, а хвост текущей сессии с начала повторил бы это без режима
+	quests      map[string]map[string]string
+	questsAt    time.Time
+	questsDirty bool
+
 	tmu     sync.Mutex // tailer и watcher
 	smu     sync.Mutex // запись settings.json
 	tailer  *gamelog.Tailer
@@ -136,12 +142,15 @@ func (a *App) loop() {
 // flush сообщает фронтенду об изменениях не чаще раза в тик.
 func (a *App) flush() {
 	a.mu.Lock()
-	ctx, dirty := a.ctx, a.dirty
-	a.dirty = false
+	ctx, dirty, quests := a.ctx, a.dirty, a.questsDirty
+	a.dirty, a.questsDirty = false, false
 	a.mu.Unlock()
 	if dirty && ctx != nil {
 		runtime.EventsEmit(ctx, "snapshot", a.GetSnapshot())
 		runtime.EventsEmit(ctx, "view")
+	}
+	if quests && ctx != nil {
+		runtime.EventsEmit(ctx, "quests")
 	}
 }
 
@@ -176,6 +185,7 @@ func (a *App) onLogEvent(e gamelog.Event) {
 	case gamelog.EvMode:
 		a.mu.Lock()
 		a.mode = e.Mode
+		a.questsDirty = true // у PvE и PvP свои задания
 		a.mu.Unlock()
 	case gamelog.EvMap:
 		// данные режима — к загрузке карты: на входе в игру режим мигает Pve → Regular → Pve
@@ -183,6 +193,20 @@ func (a *App) onLogEvent(e gamelog.Event) {
 		mode := a.mode
 		a.mu.Unlock()
 		a.useData(mode)
+	case gamelog.EvQuest:
+		a.mu.Lock()
+		if e.At.After(a.questsAt) {
+			if a.quests == nil {
+				a.quests = map[string]map[string]string{}
+			}
+			if a.quests[a.mode] == nil {
+				a.quests[a.mode] = map[string]string{}
+			}
+			a.quests[a.mode][e.QuestID] = e.Status
+			a.questsDirty = true
+		}
+		a.mu.Unlock()
+		return
 	}
 	a.core.OnLogEvent(e)
 	a.markDirty()
@@ -218,6 +242,13 @@ func (a *App) startWatching() {
 		a.watcher = nil
 	}
 	a.tailer = nil
+	quests := map[string]map[string]string{}
+	if game != "" {
+		quests = gamelog.ScanQuests(filepath.Join(game, "Logs"))
+	}
+	a.mu.Lock()
+	a.quests, a.questsAt, a.questsDirty = quests, time.Now(), true
+	a.mu.Unlock()
 	if game != "" {
 		a.tailer = gamelog.NewTailer(filepath.Join(game, "Logs"), a.onLogEvent)
 		a.tailer.Poll() // текущая сессия — с начала
@@ -328,6 +359,21 @@ func (a *App) SetFilters(f map[string]bool) error {
 
 func (a *App) SetLootQuery(q string) error {
 	return a.updateSettings(func(s *settings.Settings) { s.LootQuery = q })
+}
+
+// GetQuestStatus — задания режима игры по логам: id → "start" | "fail" | "done".
+func (a *App) GetQuestStatus() map[string]string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := map[string]string{}
+	for id, st := range a.quests[a.mode] {
+		out[id] = st
+	}
+	return out
+}
+
+func (a *App) SetHiddenTasks(ids []string) error {
+	return a.updateSettings(func(s *settings.Settings) { s.HiddenTasks = ids })
 }
 
 // SetPaths сохраняет ручные пути ("" — автопоиск) и перезапускает слежение.

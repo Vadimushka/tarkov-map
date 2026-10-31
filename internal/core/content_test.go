@@ -107,3 +107,28 @@ func TestViewExtractDetails(t *testing.T) {
 		t.Errorf("пустые списки должны быть [], а не null: %s", b)
 	}
 }
+
+func TestContentTasks(t *testing.T) {
+	c := New(fakeSrc{})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, Bundle: "maps/shopping_mall.bundle"})
+	m := c.Content()
+	if len(m.Tasks) != 1 || m.Tasks[0].Name != "Задание в ТЦ" || m.Tasks[0].Trader != "Прапор" || !m.Tasks[0].Kappa || len(m.Tasks[0].Objectives) != 3 {
+		t.Fatalf("Tasks = %+v", m.Tasks)
+	}
+	o := m.Tasks[0].Objectives
+	px, py := mapgeo.Project(ic, 0, 0)
+	if z := o[0].Zones; len(z) != 1 || z[0].Layer != "First_Floor" || len(z[0].Outline) != 3 || z[0].PX != px || z[0].PY != py {
+		t.Errorf("зона = %+v", z)
+	}
+	if p := o[1].Points; len(p) != 1 || p[0].Layer != "Ground_Level" || !o[1].Optional || o[1].Item != "Флешка" || o[1].Keys[0] != "Ключ от КПП" {
+		t.Errorf("предмет = %+v", o[1])
+	}
+	b, _ := json.Marshal(m.Tasks)
+	if strings.Contains(string(b), "null") {
+		t.Errorf("пустые списки должны быть [], а не null: %s", b)
+	}
+	c.SelectMap("maps/laboratory_preset.bundle")
+	if b, _ := json.Marshal(c.Content()); !strings.Contains(string(b), `"Tasks":[]`) {
+		t.Errorf("карта без SVG: %s", b)
+	}
+}

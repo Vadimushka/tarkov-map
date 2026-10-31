@@ -9,6 +9,8 @@
     places: true, c_weapon: false, c_med: false, c_tech: false, c_safe: false, c_cache: false, c_body: false, c_misc: false,
     loot_all: false, locks: false, switches: false, hazards: false, weapons: false, bosses: false,
     spawn_pmc: false, spawn_scav: false, spawn_sniper: false, btr: false,
+    // вкладка «Задания»
+    quests: true, quests_active: true,
   };
   const MODE = { pve: "PvE", regular: "PvP" };
 
@@ -57,6 +59,7 @@
     cb.addEventListener("change", () => {
       filters[cb.dataset.f] = cb.checked;
       TMap.setFilter(cb.dataset.f, cb.checked);
+      if (cb.dataset.f === "quests_active") applyQuests();
       go().SetFilters(filters).catch(console.error);
     }),
   );
@@ -110,6 +113,7 @@
     content = null;
     contentKey = "";
     fillCounts(null);
+    applyQuests();
     // поле выключают только метки карты без названий; нет меток — нет и причины
     lootQ.disabled = false;
     lootQ.placeholder = LOOT_PH;
@@ -181,16 +185,124 @@
       return true;
     }
     if (c.MapID !== v.MapID || c.Gen !== v.ContentGen) return false;
-    for (const k of ["Places", "Containers", "Loot", "Locks", "Switches", "Hazards", "Weapons", "Bosses", "Spawns", "BTR"]) c[k] = c[k] || [];
+    for (const k of ["Places", "Containers", "Loot", "Locks", "Switches", "Hazards", "Weapons", "Bosses", "Spawns", "BTR", "Tasks"]) c[k] = c[k] || [];
     c.Items = c.Items || {};
     content = c;
     contentKey = key;
     lootQ.disabled = c.ItemsMissing;
     lootQ.placeholder = c.ItemsMissing ? "В этой версии программы нет названий предметов" : LOOT_PH;
+    applyQuests(); // до setContent: слой заданий строится сразу с выбором этой карты
     lootN = TMap.setContent(c, lootQ.disabled ? "" : lootQ.value);
     fillCounts(c);
     showLootFound();
     return true;
+  }
+
+  // --- вкладка «Задания» ---
+  // На карте — отмеченные задания; «Только активные» оставляет взятые и не сданные по логам игры.
+  // Логов нет или в них нет заданий этого режима — фильтру не на что опереться, видны все.
+  const QUEST_STATUS = { start: "взято", done: "сдано", fail: "провалено" };
+  const questRank = (t) => ({ start: 0, done: 2, fail: 2 })[questStatus[t.ID]] ?? 1; // взятые наверху, сданные внизу
+  let questStatus = {};          // id → "start" | "done" | "fail"
+  let hiddenTasks = new Set();   // id снятых галочек — из настроек
+  const questQ = $("#quest-q"), questList = $("#quests");
+
+  const knownStatus = () => Object.keys(questStatus).length > 0;
+  const passesActive = (t) => !filters.quests_active || !knownStatus() || questStatus[t.ID] === "start";
+
+  // listed — задания в списке: фильтр «Только активные» и поиск по названию
+  function listed() {
+    if (!content) return [];
+    const q = questQ.value.trim().toLowerCase().replaceAll("ё", "е");
+    return content.Tasks.filter((t) => passesActive(t) && (!q || t.Name.toLowerCase().replaceAll("ё", "е").includes(q)))
+      .sort((a, b) => questRank(a) - questRank(b));
+  }
+
+  function applyQuests() {
+    const tasks = content ? content.Tasks : [];
+    const on = tasks.filter((t) => passesActive(t) && !hiddenTasks.has(t.ID));
+    TMap.setQuests(new Set(on.map((t) => t.ID)), questStatus);
+    let sum = content ? `На карте ${on.length} из ${tasks.length}` : "";
+    if (content && filters.quests_active && !knownStatus()) sum += " · в логах игры заданий нет, видны все";
+    $("#quest-sum").textContent = sum;
+    renderQuestList();
+  }
+
+  function renderQuestList() {
+    const top = questList.scrollTop;
+    questList.replaceChildren();
+    const add = (parent, tag, cls, text) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text) n.textContent = text;
+      parent.appendChild(n);
+      return n;
+    };
+    const tasks = listed();
+    if (!tasks.length) {
+      let text = "На этой карте заданий нет";
+      if (content && content.Tasks.length) {
+        text = questQ.value.trim() ? "Ничего не найдено" : "Взятых заданий на этой карте нет — снимите «Только активные», чтобы увидеть все";
+      }
+      add(questList, "div", "empty", text);
+      return;
+    }
+    for (const t of tasks) {
+      const box = add(questList, "div", "task" + (hiddenTasks.has(t.ID) ? " off" : ""));
+      const lab = add(box, "label");
+      const cb = add(lab, "input");
+      cb.type = "checkbox";
+      cb.checked = !hiddenTasks.has(t.ID);
+      cb.addEventListener("change", () => {
+        if (cb.checked) hiddenTasks.delete(t.ID);
+        else hiddenTasks.add(t.ID);
+        box.classList.toggle("off", !cb.checked);
+        saveHidden();
+      });
+      const name = add(lab, "span", "name", t.Name);
+      const st = questStatus[t.ID];
+      if (st) add(name, "span", "st " + st, QUEST_STATUS[st]);
+      const meta = [t.Trader, t.Kappa ? "Каппа" : ""].filter(Boolean).join(" · ");
+      if (meta) add(box, "div", "meta", meta);
+      for (const o of t.Objectives) {
+        const p = o.Zones[0] || o.Points[0];
+        const row = add(box, "div", "obj" + (o.Optional ? " opt" : "") + (p ? " lnk" : ""), o.Text + (o.Optional ? " (необяз.)" : ""));
+        if (p) {
+          row.title = "Показать на карте";
+          row.addEventListener("click", () => TMap.showPoint(p.PX, p.PY, p.Layer));
+        }
+      }
+    }
+    questList.scrollTop = top;
+  }
+
+  function saveHidden() {
+    applyQuests();
+    go().SetHiddenTasks([...hiddenTasks]).catch(console.error);
+  }
+
+  // «Все» и «Ничего» — для заданий в списке (с учётом поиска), остальные не трогаются
+  $("#quests-all").addEventListener("click", () => {
+    for (const t of listed()) hiddenTasks.delete(t.ID);
+    saveHidden();
+  });
+  $("#quests-none").addEventListener("click", () => {
+    for (const t of listed()) hiddenTasks.add(t.ID);
+    saveHidden();
+  });
+  questQ.addEventListener("input", renderQuestList);
+
+  function loadQuestStatus() {
+    return go().GetQuestStatus().then((s) => {
+      questStatus = s || {};
+      applyQuests();
+    }).catch(console.error);
+  }
+
+  // список виден на вкладке «Задания», пока лента развёрнута и карта на экране
+  function showQuestList() {
+    const tab = document.querySelector(".tab.active[data-tab]");
+    questList.hidden = !(tab && tab.dataset.tab === "quests" && !ribbon.classList.contains("collapsed") && view);
   }
 
   // --- вид карты ---
@@ -218,6 +330,7 @@
       TMap.clear();
       dropContent();
       showMessage();
+      showQuestList();
       return;
     }
     if (v.MapID !== mapID) {
@@ -231,6 +344,7 @@
         TMap.clear();
         dropContent();
         showMessage();
+        showQuestList();
         return;
       }
       viewError = "";
@@ -250,6 +364,7 @@
     view = v;
     TMap.render(v, side);
     applyFilters();
+    showQuestList();
     const shots = v.Markers.filter((m) => m.Kind === "shot");
     // новый скрин — показать этаж, на котором он сделан, и при слежении удержать его в кадре
     if (shots.length > shotCount) {
@@ -394,11 +509,13 @@
     });
     document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", p.dataset.pane === name));
     if (name === "settings") fillSettings().catch(console.error);
+    showQuestList();
   }
   function setCollapsed(on) {
     ribbon.classList.toggle("collapsed", on);
     $("#collapse").textContent = on ? "˅" : "˄";
     $("#collapse").title = on ? "Развернуть ленту" : "Свернуть ленту";
+    showQuestList();
     try { localStorage.setItem("ribbonCollapsed", on ? "1" : ""); } catch (e) { /* без хранилища — не запоминаем */ }
   }
   let justExpanded = false; // двойной щелчок по свёрнутой ленте оставляет её развёрнутой
@@ -457,6 +574,7 @@
       const saved = st.Filters || {};
       for (const k in FILTER_DEFAULTS) filters[k] = k in saved ? !!saved[k] : FILTER_DEFAULTS[k];
       lootQ.value = st.LootQuery || "";
+      hiddenTasks = new Set(st.HiddenTasks || []);
     } catch (e) {
       console.error(e);
     }
@@ -467,6 +585,8 @@
       updateStatus().catch(console.error);
     });
     window.runtime.EventsOn("view", () => loadView());
+    window.runtime.EventsOn("quests", () => loadQuestStatus());
+    await loadQuestStatus();
     snapshot = await go().GetSnapshot();
     await loadView();
     await updateStatus();

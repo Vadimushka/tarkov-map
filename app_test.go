@@ -7,8 +7,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/Vadimushka/tarkov-map/internal/core"
 	"github.com/Vadimushka/tarkov-map/internal/data"
+	"github.com/Vadimushka/tarkov-map/internal/gamelog"
 	"github.com/Vadimushka/tarkov-map/internal/settings"
 )
 
@@ -74,5 +77,38 @@ func TestGetVersion(t *testing.T) {
 	t.Cleanup(func() { version = old })
 	if got := (&App{}).GetVersion(); got != "v1.2.3" {
 		t.Errorf("GetVersion() = %q", got)
+	}
+}
+
+// Задания: прежние — из разбора логов на старте, новые — из хвоста, в режиме, который сейчас в
+// игре. Чтение текущей сессии с начала повторяет старые уведомления — их режим уже неизвестен,
+// и они не должны портить разобранное.
+func TestQuestStatus(t *testing.T) {
+	at := func(h, m int) time.Time { return time.Date(2026, 10, 31, h, m, 0, 0, time.Local) }
+	a := &App{core: core.New(nil), mode: "pve", questsAt: at(12, 0),
+		quests: map[string]map[string]string{"pve": {"q1": "start"}, "regular": {"q3": "start"}}}
+	a.onLogEvent(gamelog.Event{Kind: gamelog.EvQuest, At: at(11, 0), QuestID: "q3", Status: "start"})
+	a.onLogEvent(gamelog.Event{Kind: gamelog.EvQuest, At: at(12, 5), QuestID: "q1", Status: "done"})
+	a.onLogEvent(gamelog.Event{Kind: gamelog.EvQuest, At: at(12, 6), QuestID: "q2", Status: "start"})
+	if got := fmt.Sprint(a.GetQuestStatus()); got != "map[q1:done q2:start]" {
+		t.Errorf("PvE = %s", got)
+	}
+	a.onLogEvent(gamelog.Event{Kind: gamelog.EvMode, Mode: "regular"})
+	if got := fmt.Sprint(a.GetQuestStatus()); got != "map[q3:start]" {
+		t.Errorf("PvP = %s", got)
+	}
+	if !a.questsDirty {
+		t.Error("фронтенд не узнает о новых заданиях")
+	}
+}
+
+func TestSetHiddenTasks(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{cfgDir: dir, set: settings.Load(dir)}
+	if err := a.SetHiddenTasks([]string{"t1", "t2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Load(dir).HiddenTasks; strings.Join(got, ",") != "t1,t2" {
+		t.Errorf("на диске %v", got)
 	}
 }

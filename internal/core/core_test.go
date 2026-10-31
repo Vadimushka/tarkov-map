@@ -23,7 +23,7 @@ type fakeSrc struct{}
 func (fakeSrc) MapByScene(scene string) (data.GameMap, bool) {
 	switch scene {
 	case "maps/shopping_mall.bundle":
-		return data.GameMap{NormalizedName: "interchange", Name: "Развязка", ScenePath: scene,
+		return data.GameMap{ID: "ic-id", NormalizedName: "interchange", Name: "Развязка", ScenePath: scene,
 			Extracts: []data.Extract{{Name: "Безопасная комната", Faction: "pmc", Pos: mapgeo.Vec3{X: -48, Y: 23, Z: 44},
 				Outline: []mapgeo.Vec3{{X: -50, Y: 23, Z: 40}, {X: -46, Y: 23, Z: 40}, {X: -46, Y: 23, Z: 48}},
 				Item:    "i_rub", ItemCount: 20000, Switches: []string{"sw1"}}},
@@ -269,4 +269,16 @@ func TestSnapshotRaidClock(t *testing.T) {
 	if s := c.Snapshot(); !s.RaidEnd.Equal(at(21, 40, 0)) {
 		t.Errorf("после рейда: конец %v", s.RaidEnd)
 	}
+}
+
+func (fakeSrc) Tasks(mapID string) []data.Task {
+	if mapID != "ic-id" {
+		return nil
+	}
+	return []data.Task{{ID: "t1", Name: "Задание в ТЦ", Trader: "Прапор", Kappa: true, Objectives: []data.Objective{
+		{ID: "o1", Text: "Посетить ТЦ", Zones: []data.Zone{{Pos: mapgeo.Vec3{X: 0, Y: 30, Z: 0},
+			Outline: []mapgeo.Vec3{{X: -5, Y: 30, Z: -5}, {X: 5, Y: 30, Z: -5}, {X: 5, Y: 30, Z: 5}}, Top: 33, Bottom: 27}}},
+		{ID: "o2", Text: "Найти флешку", Optional: true, Points: []mapgeo.Vec3{{X: 10, Y: 1, Z: 20}}, Item: "Флешка", Keys: []string{"Ключ от КПП"}},
+		{ID: "o3", Text: "Ликвидировать Диких"},
+	}}}
 }

@@ -64,6 +64,27 @@ type BossPt struct {
 	Chance, SpotChance float64
 }
 
+// TaskInfo — задание на этой карте; цели — в координатах карты.
+type TaskInfo struct {
+	ID, Name, Trader string
+	Kappa            bool
+	Objectives       []ObjectiveInfo
+}
+
+type ObjectiveInfo struct {
+	ID, Text string
+	Optional bool
+	Zones    []ZoneArea // куда прийти; Pt — центр зоны
+	Points   []Pt       // где может лежать предмет задания
+	Item     string
+	Keys     []string
+}
+
+type ZoneArea struct {
+	Pt
+	Outline [][2]float64
+}
+
 // MapContent — метки вкладки «Лут и места». Отдаётся отдельно от MapView: вид
 // перезапрашивается на каждый скрин, а меток на Улицах ≈2500.
 type MapContent struct {
@@ -81,6 +102,7 @@ type MapContent struct {
 	Bosses       []BossPt
 	Spawns       []SpawnPt
 	BTR          []NamedPt
+	Tasks        []TaskInfo
 }
 
 func (c *Core) Content() MapContent {
@@ -90,7 +112,7 @@ func (c *Core) Content() MapContent {
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
 	m := MapContent{MapID: g.gm.NormalizedName, Gen: c.gen, Places: []PlacePt{}, Containers: []ContainerPt{},
 		Loot: []LootPt{}, Items: map[string]data.ItemName{}, Locks: []LockPt{}, Switches: []SwitchPt{},
-		Hazards: []HazardArea{}, Weapons: []NamedPt{}, Bosses: []BossPt{}, Spawns: []SpawnPt{}, BTR: []NamedPt{}}
+		Hazards: []HazardArea{}, Weapons: []NamedPt{}, Bosses: []BossPt{}, Spawns: []SpawnPt{}, BTR: []NamedPt{}, Tasks: []TaskInfo{}}
 	if !g.supported {
 		return m
 	}
@@ -142,6 +164,23 @@ func (c *Core) Content() MapContent {
 		for _, s := range b.Spots {
 			m.Bosses = append(m.Bosses, BossPt{Pt: at(s.Pos), Name: b.Name, Chance: b.Chance, SpotChance: s.Chance})
 		}
+	}
+	for _, t := range c.src.Tasks(g.gm.ID) {
+		ti := TaskInfo{ID: t.ID, Name: t.Name, Trader: t.Trader, Kappa: t.Kappa, Objectives: []ObjectiveInfo{}}
+		for _, o := range t.Objectives {
+			oi := ObjectiveInfo{ID: o.ID, Text: o.Text, Optional: o.Optional, Zones: []ZoneArea{}, Points: []Pt{},
+				Item: o.Item, Keys: orEmpty(o.Keys)}
+			for _, z := range o.Zones {
+				px, py := mapgeo.Project(d, z.Pos.X, z.Pos.Z)
+				layer := mapgeo.LayerOfSpan(d, z.Pos.X, z.Pos.Z, z.Bottom, z.Top)
+				oi.Zones = append(oi.Zones, ZoneArea{Pt: Pt{PX: px, PY: py, Layer: layer}, Outline: outline(d, z.Outline)})
+			}
+			for _, p := range o.Points {
+				oi.Points = append(oi.Points, at(p))
+			}
+			ti.Objectives = append(ti.Objectives, oi)
+		}
+		m.Tasks = append(m.Tasks, ti)
 	}
 	return m
 }

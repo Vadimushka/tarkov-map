@@ -5,6 +5,7 @@
   --c-weapon: #d98c5f; --c-med: #ef6f9a; --c-tech: #8fa8ff; --c-safe: #f5f0e1; --c-cache: #a3b86c; --c-body: #b0a8a0; --c-misc: #8c7b65;
   --loot-hit: #ffe14d;
   --hazard: #ff6b4a; --sniper: #ffaa00; --place: #cfc8b4;
+  --quest: #4dd0e1;
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
 body { display: flex; flex-direction: column; }
@@ -111,3 +112,27 @@ input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid
 #card .lnk { color: var(--accent); cursor: pointer; }
 #card .lnk::after { content: " · показать"; color: var(--muted); font-size: 11px; }
 #card .lnk:hover { text-decoration: underline; }
+
+/* вкладка «Задания»: список слева над картой */
+#quest-q { width: 160px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
+#quest-sum { font-size: 11px; }
+#quests { position: absolute; z-index: 4; left: 6px; top: 6px; bottom: 6px; width: 300px; overflow-y: auto; background: #1d1b16ee; border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px 0; user-select: text; scrollbar-width: thin; }
+#quests[hidden] { display: none; }
+#quests .empty { color: var(--muted); padding: 10px 12px; }
+#quests .task { padding: 5px 10px 6px; border-bottom: 1px solid #2c2922; }
+#quests .task.off .name, #quests .task.off .obj { opacity: .5; }
+#quests label { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
+#quests label input { margin: 2px 0 0; }
+#quests .name { color: #fff; }
+#quests .meta { color: var(--muted); font-size: 11px; margin-left: 19px; }
+#quests .st { border-radius: 3px; padding: 0 4px; font-size: 10.5px; margin-left: 4px; }
+#quests .st.start { background: #24535a; color: #bff3fa; }
+#quests .st.done { background: #2f4a2c; color: #c9efc0; }
+#quests .st.fail { background: #5a2a24; color: #f6c4bb; }
+#quests .obj { margin-left: 19px; font-size: 12px; color: var(--text); }
+#quests .obj::before { content: "• "; color: var(--muted); }
+#quests .obj.opt { color: var(--muted); }
+#quests .obj.lnk { color: var(--quest); cursor: pointer; }
+#quests .obj.lnk:hover { text-decoration: underline; }
+.quest-pin text { fill: #071c1f; font-size: 11px; font-weight: 800; pointer-events: none; }

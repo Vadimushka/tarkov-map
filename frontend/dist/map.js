@@ -151,7 +151,7 @@ window.TMap = (() => {
   // масштабе, только пока виден (CSS-переменная масштаба на весь слой оказалась медленнее
   // обхода атрибутов). Подсказки — одна пара обработчиков на все слои.
   const LAYERS = ["hazards", "places", "spawn_scav", "spawn_sniper", "spawn_pmc", "c_misc", "c_body", "c_cache", "c_tech",
-    "c_med", "c_safe", "c_weapon", "loot_all", "locks", "switches", "weapons", "btr", "bosses", "loot_hit"];
+    "c_med", "c_safe", "c_weapon", "loot_all", "locks", "switches", "weapons", "btr", "bosses", "quests", "loot_hit"];
   // ключ → {g, pins, built, on, upp, cg (кружки группировки), cpins, cupp, cfloor}
   const layers = {};
   for (const k of LAYERS) layers[k] = { g: el("g", { style: "display:none" }, content), pins: [], built: false, on: false, upp: 0, cpins: [] };
@@ -307,6 +307,50 @@ window.TMap = (() => {
   const lootTip = (pt) => ["Может появиться:", ...lootLines(pt, 8)].join("\n");
   const lootCard = (pt) => ({ title: "Лут на земле", sub: "Может появиться:", lines: lootLines(pt, 30) });
 
+  // --- задания: зона цели — пунктирный контур и «!» в центре, место предмета — «?» ---
+  let questOn = null;   // Set id заданий на карте; null — все
+  let questStatus = {}; // id → "start" | "done" | "fail" по логам игры
+  const QUEST_STATUS = { start: "взято", done: "сдано", fail: "провалено" };
+  function questMark(g, ch) {
+    g.classList.add("quest-pin");
+    el("circle", { r: 8, fill: css("--quest"), stroke: "rgba(0,0,0,.85)", "stroke-width": 1.5 }, g);
+    el("text", { y: 4, "text-anchor": "middle" }, g).textContent = ch;
+  }
+  // место цели для ссылки «показать»: центр первой зоны или первое место предмета
+  function questPlace(o) {
+    const p = o.Zones[0] || o.Points[0];
+    return p && { text: o.Text, x: p.PX, y: p.PY, layer: p.Layer };
+  }
+  function questCard(t, o) {
+    const sub = [t.Trader, t.Kappa ? "нужно для «Каппы»" : "", QUEST_STATUS[questStatus[t.ID]] || ""].filter(Boolean).join(" · ");
+    const lines = [o.Text + (o.Optional ? " (необязательно)" : "")];
+    if (o.Item) lines.push("Предмет: " + o.Item);
+    if (o.Keys.length) lines.push("Ключи: " + o.Keys.join("; "));
+    const others = t.Objectives.filter((x) => x !== o).map(questPlace).filter(Boolean);
+    return { title: t.Name, sub, lines, links: [{ head: "Другие цели на карте", items: others }] };
+  }
+  function buildQuests(L) {
+    const color = css("--quest"), zones = el("g", {}, L.g); // контуры под значками
+    for (const t of data.Tasks) {
+      if (questOn && !questOn.has(t.ID)) continue;
+      for (const o of t.Objectives) {
+        const tipFn = () => t.Name + " · " + o.Text, cardFn = () => questCard(t, o);
+        for (const z of o.Zones) {
+          // контур мышь не ловит: зоны бывают в полкарты и закрыли бы метки под собой
+          if (z.Outline.length >= 3) {
+            el("polygon", {
+              points: z.Outline.map((p) => p[0] + "," + p[1]).join(" "), "data-layer": z.Layer, "pointer-events": "none",
+              fill: color, "fill-opacity": 0.12, stroke: color, "stroke-width": 1.5, "stroke-dasharray": "6 4",
+              "vector-effect": "non-scaling-stroke",
+            }, zones);
+          }
+          questMark(cpin(L, z.PX, z.PY, z.Layer, tipFn, cardFn), "!");
+        }
+        for (const p of o.Points) questMark(cpin(L, p.PX, p.PY, p.Layer, tipFn, cardFn), "?");
+      }
+    }
+  }
+
   function build(key) {
     const L = layers[key];
     tip.style.display = "none"; // метка под курсором могла исчезнуть, а mousemove не придёт
@@ -353,6 +397,8 @@ window.TMap = (() => {
       for (const s of data.Spawns) {
         if (s.Kind === kind) spawnMark(cpin(L, s.PX, s.PY, s.Layer, () => name, () => ({ title: name })), kind);
       }
+    } else if (key === "quests") {
+      buildQuests(L);
     } else if (key === "btr") {
       for (const b of data.BTR) btrMark(cpin(L, b.PX, b.PY, b.Layer, () => "Остановка БТР · " + b.Name, () => ({ title: b.Name, sub: "Остановка БТР" })));
     } else if (key === "hazards") {
@@ -378,7 +424,8 @@ window.TMap = (() => {
   // Только своего этажа (чужие скрыты); на предельном приближении — все метки по отдельности.
   // Пересобирается после масштаба (с задержкой: колесо крутят несколькими щелчками) и смены этажа.
   const CLUSTER_PX = 22;
-  const CLUSTERED = new Set(["c_misc", "c_body", "c_cache", "c_tech", "c_med", "c_safe", "c_weapon", "loot_all"]);
+  const CLUSTERED = new Set(["c_misc", "c_body", "c_cache", "c_tech", "c_med", "c_safe", "c_weapon", "loot_all", "quests"]);
+  const CLUSTER_COLOR = { loot_all: "--accent", quests: "--quest" }; // у контейнеров — --c-<группа>
 
   function cluster(key) {
     const L = layers[key];
@@ -410,7 +457,7 @@ window.TMap = (() => {
       if (!cells.has(k)) cells.set(k, []);
       cells.get(k).push(c);
     }
-    const color = key === "loot_all" ? css("--accent") : css("--" + key.replace("_", "-"));
+    const color = css(CLUSTER_COLOR[key] || "--" + key.replace("_", "-"));
     for (const c of found) {
       if (c.m.length < 2) continue;
       let sx = 0, sy = 0;
@@ -453,16 +500,18 @@ window.TMap = (() => {
     L.g.style.display = on ? "" : "none";
   }
 
+  function drop(key) {
+    const L = layers[key];
+    L.g.replaceChildren();
+    L.pins = [];
+    L.cpins = [];
+    L.cg = null;
+    L.built = false;
+  }
+
   function resetContent() {
     closeCard();
-    for (const k of LAYERS) {
-      const L = layers[k];
-      L.g.replaceChildren();
-      L.pins = [];
-      L.cpins = [];
-      L.cg = null;
-      L.built = false;
-    }
+    LAYERS.forEach(drop);
   }
 
   // setContent ставит метки карты вместе со строкой поиска лута — так каждый слой
@@ -484,17 +533,19 @@ window.TMap = (() => {
   function setLootQuery(q) {
     lootQ = parseQuery(q);
     matchLoot();
-    for (const k of ["loot_all", "loot_hit"]) {
-      const L = layers[k];
-      L.g.replaceChildren();
-      L.pins = [];
-      L.cpins = [];
-      L.cg = null;
-      L.built = false;
-    }
+    drop("loot_all");
+    drop("loot_hit");
     show("loot_hit", !!lootHits);
     if (layers.loot_all.on) build("loot_all");
     return hitCount();
+  }
+
+  // setQuests — какие задания показывать (Set id, null — все) и их состояние для карточек
+  function setQuests(ids, status) {
+    questOn = ids;
+    questStatus = status || {};
+    drop("quests");
+    if (layers.quests.on) show("quests", true);
   }
 
   // cleanSVG оставляет от карты только рисунок. Карту скачивает scripts/seed при сборке
@@ -897,5 +948,6 @@ window.TMap = (() => {
 
   const onFloor = (fn) => (onFloorCb = fn);
 
-  return { setSVG, clear, render, setContent, setLootQuery, lootHitsElsewhere, setFloor, onFloor, setFilter, centerOn, keepInView, fit };
+  return { setSVG, clear, render, setContent, setLootQuery, setQuests, lootHitsElsewhere, setFloor, onFloor, setFilter, showPoint,
+    centerOn, keepInView, fit };
 })();

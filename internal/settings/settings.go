@@ -17,6 +17,7 @@ type Settings struct {
 	Side              string          // "pmc" | "scav"
 	Filters           map[string]bool // ключи задаёт фронтенд
 	LootQuery         string          // строка поиска лута на земле
+	HiddenTasks       []string        // id заданий, снятых во вкладке «Задания»
 	Window            *WindowPos
 }
 

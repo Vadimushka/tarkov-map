@@ -18,6 +18,7 @@ type MapSource interface {
 	MapDef(normalizedName string) (mapgeo.MapDef, bool)
 	Labels(normalizedName string) []data.Label
 	ItemName(id string) (data.ItemName, bool)
+	Tasks(mapID string) []data.Task
 }
 
 type Snapshot struct {

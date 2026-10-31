@@ -121,27 +121,27 @@
   const LOOT_PH = lootQ.placeholder;
   let lootTimer = 0;
 
-  // 1 точка, 3 точки, 5 точек, 11 точек, 21 точка
-  function points(n) {
+  // 1 место, 3 места, 5 мест, 11 мест, 21 место
+  function places(n) {
     const d = n % 10, dd = n % 100;
-    if (d === 1 && dd !== 11) return n + " точка";
-    if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + " точки";
-    return n + " точек";
+    if (d === 1 && dd !== 11) return n + " место";
+    if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + " места";
+    return n + " мест";
   }
 
   // строка остаётся в поле, даже когда оно неактивно: появятся названия — поиск вернётся
-  let lootN = 0; // совпавших точек на всех этажах
+  let lootN = 0; // найдено на всех этажах: точки лута, контейнеры, замки
 
   function applyLootQuery() {
     lootN = TMap.setLootQuery(lootQ.disabled ? "" : lootQ.value);
     showLootFound();
   }
 
-  // точки других этажей скрыты — сказать, сколько из найденных видно на этом
+  // места других этажей скрыты — сказать, сколько из найденных видно на этом
   function showLootFound() {
     const q = lootQ.disabled ? "" : lootQ.value;
-    const found = lootN % 10 === 1 && lootN % 100 !== 11 ? "найдена " : "найдено "; // найдена 1 точка, найдено 3 точки
-    let text = q.trim().length < 2 ? "" : lootN ? found + points(lootN) : "не найдено";
+    const searching = q.split(",").some((w) => w.trim().length >= 2);
+    let text = !searching ? "" : lootN ? "найдено " + places(lootN) : "не найдено";
     const off = text && lootN ? TMap.lootHitsElsewhere() : 0;
     if (off) text = `найдено ${lootN}, на этаже ${lootN - off}`;
     if (lootQ.disabled && lootQ.value.trim()) text = "нет названий предметов"; // placeholder закрыт строкой

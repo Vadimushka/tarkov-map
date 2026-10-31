@@ -248,20 +248,51 @@ window.TMap = (() => {
     return many;
   }
 
-  // поиск: без регистра, «ё» = «е», подстрока в полном или кратком названии, от 2 символов
+  // поиск: слова через запятую, каждое от 2 символов; без регистра, «ё» = «е»; подстрока в полном
+  // или кратком названии предмета, в названии контейнера, в названии ключа от замка
   const norm = (s) => (s || "").toLowerCase().replaceAll("ё", "е");
-  let lootQ = ""; // нормализованная строка поиска
-  const matches = (n) => lootQ.length >= 2 && (norm(n.Name).includes(lootQ) || norm(n.Short).includes(lootQ));
+  let lootQ = []; // слова поиска, нормализованные
+  const parseQuery = (q) => norm(q).split(",").map((s) => s.trim()).filter((s) => s.length >= 2);
+  const hasWord = (s) => !!s && lootQ.some((w) => norm(s).includes(w));
+  const matches = (n) => hasWord(n.Name) || hasWord(n.Short);
+  let boxHits = new Set(), lockHits = new Set(); // индексы совпавших контейнеров и замков
 
   function matchLoot() {
     lootHits = null;
-    if (!data || lootQ.length < 2) return;
+    boxHits = new Set();
+    lockHits = new Set();
+    if (!data || !lootQ.length) return;
     const ids = new Set(Object.keys(data.Items).filter((id) => matches(data.Items[id])));
     lootHits = new Set();
     data.Loot.forEach((pt, i) => {
       if (pt.Items.some((id) => ids.has(id))) lootHits.add(i);
     });
+    data.Containers.forEach((c, i) => hasWord(c.Name) && boxHits.add(i));
+    data.Locks.forEach((l, i) => hasWord(l.Key) && lockHits.add(i));
   }
+  const hitCount = () => (lootHits ? lootHits.size + boxHits.size + lockHits.size : 0);
+
+  function containerPin(L, c) {
+    const g = cpin(L, c.PX, c.PY, c.Layer, () => c.Name, () => ({ title: c.Name, sub: "Контейнер · " + (GROUP[c.Group] || GROUP.misc) }));
+    const ic = containerIcon(c.Type);
+    if (ic) icon(ic, g);
+    else el("circle", { r: 5, fill: css("--c-" + c.Group) || css("--c-misc"), stroke: "rgba(0,0,0,.8)", "stroke-width": 1 }, g);
+    return g;
+  }
+
+  function lockPin(L, l) {
+    const kind = LOCK[l.Kind] || "Замок", need = l.Key ? "ключ: " + l.Key : "ключ неизвестен";
+    const text = [kind, need];
+    if (l.NeedsPower) text.push("нужно питание");
+    const lines = [need[0].toUpperCase() + need.slice(1)];
+    if (l.NeedsPower) lines.push("Нужно питание");
+    const g = cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · "), () => ({ title: kind, lines }));
+    icon("lock", g);
+    return g;
+  }
+
+  // найденное поиском — в жёлтом кольце поверх своего слоя, даже если слой выключен
+  const ring = (g) => g.insertBefore(el("circle", { r: ICON / 2 + 3, fill: "none", stroke: css("--loot-hit"), "stroke-width": 3 }), g.firstChild);
 
   // lootLines — что может появиться в точке, найденное поиском первым; не больше max строк
   function lootLines(pt, max) {
@@ -293,32 +324,21 @@ window.TMap = (() => {
         el("text", { "text-anchor": "middle", y: 4 }, g).textContent = p.Text;
       }
     } else if (key.startsWith("c_")) {
-      const color = css("--" + key.replace("_", "-")) || css("--c-misc");
-      for (const c of data.Containers) {
-        if ("c_" + c.Group !== key) continue;
-        const g = cpin(L, c.PX, c.PY, c.Layer, () => c.Name, () => ({ title: c.Name, sub: "Контейнер · " + (GROUP[c.Group] || GROUP.misc) }));
-        const ic = containerIcon(c.Type);
-        if (ic) icon(ic, g);
-        else el("circle", { r: 5, fill: color, stroke: "rgba(0,0,0,.8)", "stroke-width": 1 }, g);
-      }
+      for (const c of data.Containers) if ("c_" + c.Group === key) containerPin(L, c);
     } else if (key === "loot_all" || key === "loot_hit") {
       const hit = key === "loot_hit";
-      const color = css("--loot-hit");
       data.Loot.forEach((pt, i) => {
         if (hit !== !!(lootHits && lootHits.has(i))) return;
         const g = cpin(L, pt.PX, pt.PY, pt.Layer, () => lootTip(pt), () => lootCard(pt));
-        if (hit) el("circle", { r: ICON / 2 + 3, fill: "none", stroke: color, "stroke-width": 3 }, g);
         icon("loose_loot", g);
+        if (hit) ring(g);
       });
-    } else if (key === "locks") {
-      for (const l of data.Locks) {
-        const kind = LOCK[l.Kind] || "Замок", need = l.Key ? "ключ: " + l.Key : "ключ неизвестен";
-        const text = [kind, need];
-        if (l.NeedsPower) text.push("нужно питание");
-        const lines = [need[0].toUpperCase() + need.slice(1)];
-        if (l.NeedsPower) lines.push("Нужно питание");
-        icon("lock", cpin(L, l.PX, l.PY, l.Layer, () => text.join(" · "), () => ({ title: kind, lines })));
+      if (hit) {
+        for (const i of boxHits) ring(containerPin(L, data.Containers[i]));
+        for (const i of lockHits) ring(lockPin(L, data.Locks[i]));
       }
+    } else if (key === "locks") {
+      for (const l of data.Locks) lockPin(L, l);
     } else if (key === "switches") {
       for (const s of data.Switches) icon("switch", cpin(L, s.PX, s.PY, s.Layer, () => s.Name, () => switchCard(s)));
     } else if (key === "weapons") {
@@ -446,23 +466,23 @@ window.TMap = (() => {
   }
 
   // setContent ставит метки карты вместе со строкой поиска лута — так каждый слой
-  // строится один раз. Возвращает число совпавших точек лута.
+  // строится один раз. Возвращает число найденного (лут, контейнеры, замки).
   function setContent(c, q) {
     data = c;
-    lootQ = norm(q.trim());
+    lootQ = parseQuery(q);
     matchLoot();
     resetContent();
     for (const k of LAYERS) {
       if (k === "loot_hit") show(k, !!lootHits);
       else if (layers[k].on) build(k);
     }
-    return lootHits ? lootHits.size : 0;
+    return hitCount();
   }
 
-  // setLootQuery подсвечивает точки лута с подходящим предметом и возвращает их число.
-  // Совпавшие точки видны при любой строке поиска, даже без флажка «Все точки».
+  // setLootQuery подсвечивает точки лута с подходящим предметом, контейнеры и замки и
+  // возвращает их число. Найденное видно, даже когда его слой выключен.
   function setLootQuery(q) {
-    lootQ = norm(q.trim());
+    lootQ = parseQuery(q);
     matchLoot();
     for (const k of ["loot_all", "loot_hit"]) {
       const L = layers[k];
@@ -474,7 +494,7 @@ window.TMap = (() => {
     }
     show("loot_hit", !!lootHits);
     if (layers.loot_all.on) build("loot_all");
-    return lootHits ? lootHits.size : 0;
+    return hitCount();
   }
 
   // cleanSVG оставляет от карты только рисунок. Карту скачивает scripts/seed при сборке
@@ -700,10 +720,13 @@ window.TMap = (() => {
     });
   }
 
-  // lootHitsElsewhere — сколько совпавших точек лута на других этажах (они скрыты).
+  // lootHitsElsewhere — сколько найденного поиском на других этажах (оно скрыто).
   function lootHitsElsewhere() {
     let n = 0;
-    if (lootHits && data) for (const i of lootHits) if (data.Loot[i].Layer !== floor) n++;
+    if (!lootHits || !data) return 0;
+    for (const i of lootHits) if (data.Loot[i].Layer !== floor) n++;
+    for (const i of boxHits) if (data.Containers[i].Layer !== floor) n++;
+    for (const i of lockHits) if (data.Locks[i].Layer !== floor) n++;
     return n;
   }
 

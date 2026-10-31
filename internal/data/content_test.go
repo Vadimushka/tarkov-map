@@ -99,3 +99,35 @@ func TestBrokenItemsLogged(t *testing.T) {
 		t.Errorf("битый файл названий не попал в лог: %q", buf.String())
 	}
 }
+
+func TestLoadSpawnsBTRAndLinks(t *testing.T) {
+	s := loaded(t)
+	m, _ := s.MapByScene("maps/shopping_mall.bundle")
+	kinds := []string{}
+	for _, sp := range m.Spawns {
+		kinds = append(kinds, sp.Kind)
+	}
+	// «all» — и ЧВК, и Дикие; спавн босса не дублирует слой боссов
+	if strings.Join(kinds, ",") != "pmc,scav,sniper,pmc,scav" {
+		t.Errorf("Spawns kinds = %v", kinds)
+	}
+	if len(m.BTRStops) != 1 || m.BTRStops[0].Name != "КПП USEC" || m.BTRStops[0].Pos != (mapgeo.Vec3{X: 7, Y: 1, Z: 8}) {
+		t.Errorf("BTRStops = %+v", m.BTRStops)
+	}
+	if m.RaidMinutes != 40 {
+		t.Errorf("RaidMinutes = %d", m.RaidMinutes)
+	}
+	if len(m.Switches) != 1 || m.Switches[0].ID != "sw_mall" || strings.Join(m.Switches[0].Activates, ",") != "sw_door" {
+		t.Errorf("Switches = %+v", m.Switches)
+	}
+	var auto Extract
+	for _, e := range m.Extracts {
+		if e.Name == "А-Выход у ТЭЦ" {
+			auto = e
+		}
+	}
+	if len(auto.Outline) != 3 || auto.Item != "5449016a4bdc2d6f028b456f" || auto.ItemCount != 20000 ||
+		strings.Join(auto.Switches, ",") != "sw_mall" {
+		t.Errorf("А-Выход у ТЭЦ = %+v", auto)
+	}
+}

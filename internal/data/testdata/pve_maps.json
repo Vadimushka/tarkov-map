@@ -6,6 +6,17 @@
         "name": "5714dbc024597771384a510d Name",
         "normalizedName": "interchange",
         "scenePath": "maps/shopping_mall.bundle",
+        "raidDuration": 40,
+        "spawns": [
+          {"position": {"x": 1, "y": 1, "z": 1}, "sides": ["pmc"], "categories": ["player"], "zoneName": "z1"},
+          {"position": {"x": 2, "y": 1, "z": 2}, "sides": ["scav"], "categories": ["bot"], "zoneName": "ZoneCenter"},
+          {"position": {"x": 3, "y": 1, "z": 3}, "sides": ["scav"], "categories": ["bot"], "zoneName": "ZoneSniper_roof"},
+          {"position": {"x": 4, "y": 1, "z": 4}, "sides": ["all"], "categories": ["player", "bot"], "zoneName": "z2"},
+          {"position": {"x": 5, "y": 1, "z": 5}, "sides": ["scav"], "categories": ["boss"], "zoneName": "ZoneBoss"}
+        ],
+        "btrStops": [
+          {"name": "Trading/Dialog/PlayerTaxi/Woods/p5/Name", "x": 7, "y": 1, "z": 8}
+        ],
         "extracts": [
           {
             "name": "ex_interchange_scav_railway",
@@ -33,11 +44,17 @@
             "name": "ex_interchange_pmc_auto",
             "faction": "pmc",
             "switch": false,
+            "switches": ["sw_mall"],
             "position": {
               "x": -302.89,
               "y": 21.65,
               "z": -367.73
             },
+            "outline": [
+              {"x": -297.94, "y": 19.97, "z": -374.46},
+              {"x": -306.92, "y": 19.97, "z": -375.05},
+              {"x": -307.84, "y": 19.68, "z": -361.08}
+            ],
             "transferItem": {
               "item": "5449016a4bdc2d6f028b456f",
               "count": 20000
@@ -99,7 +116,9 @@
         ],
         "switches": [
           {
+            "id": "sw_mall",
             "name": "switch_mall",
+            "activates": [{"operation": "Unlock", "switch": "sw_door"}],
             "position": {
               "x": 5,
               "y": 1,

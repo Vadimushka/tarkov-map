@@ -24,14 +24,20 @@ func (fakeSrc) MapByScene(scene string) (data.GameMap, bool) {
 	switch scene {
 	case "maps/shopping_mall.bundle":
 		return data.GameMap{NormalizedName: "interchange", Name: "Развязка", ScenePath: scene,
-			Extracts:   []data.Extract{{Name: "Безопасная комната", Faction: "pmc", Pos: mapgeo.Vec3{X: -48, Y: 23, Z: 44}}},
+			Extracts: []data.Extract{{Name: "Безопасная комната", Faction: "pmc", Pos: mapgeo.Vec3{X: -48, Y: 23, Z: 44},
+				Outline: []mapgeo.Vec3{{X: -50, Y: 23, Z: 40}, {X: -46, Y: 23, Z: 40}, {X: -46, Y: 23, Z: 48}},
+				Item:    "i_rub", ItemCount: 20000, Switches: []string{"sw1"}}},
 			Transits:   []data.Transit{{Name: "Переход на Таможню", Pos: mapgeo.Vec3{X: 280, Y: 20, Z: 435}}},
 			Containers: []data.Container{{Group: "weapon", Type: "weapon-box", Name: "Оружейный кофр", Pos: mapgeo.Vec3{X: 10, Y: 1, Z: 20}}},
 			Loose:      []data.Loose{{Pos: mapgeo.Vec3{X: 0, Y: 30, Z: 0}, Items: []string{"i_led", "i_unknown"}}},
 			Locks:      []data.Lock{{Kind: "door", KeyID: "i_key", Pos: mapgeo.Vec3{X: 3, Y: 1, Z: 4}}},
 			Hazards: []data.Hazard{{Kind: "minefield", Pos: mapgeo.Vec3{X: 7, Y: 1, Z: 8},
 				Outline: []mapgeo.Vec3{{X: 0, Y: 1, Z: 0}, {X: 10, Y: 1, Z: 0}, {X: 10, Y: 1, Z: 10}}}},
-			Bosses: []data.Boss{{Name: "Килла", Chance: 0.75, Spots: []data.BossSpot{{Chance: 0.33, Pos: mapgeo.Vec3{X: 1, Y: 1, Z: 1}}}}},
+			Bosses:      []data.Boss{{Name: "Килла", Chance: 0.75, Spots: []data.BossSpot{{Chance: 0.33, Pos: mapgeo.Vec3{X: 1, Y: 1, Z: 1}}}}},
+			Switches:    []data.Switch{{ID: "sw1", Name: "Рубильник", Pos: mapgeo.Vec3{X: 5, Y: 1, Z: 6}, Activates: []string{"sw2"}}},
+			Spawns:      []data.Spawn{{Kind: "pmc", Pos: mapgeo.Vec3{X: 1, Y: 1, Z: 1}}, {Kind: "sniper", Pos: mapgeo.Vec3{X: 2, Y: 1, Z: 2}}},
+			BTRStops:    []data.NamedPos{{Name: "КПП USEC", Pos: mapgeo.Vec3{X: 7, Y: 1, Z: 8}}},
+			RaidMinutes: 40,
 		}, true
 	case "maps/laboratory_preset.bundle":
 		return data.GameMap{NormalizedName: "the-lab", Name: "Лаборатория", ScenePath: scene}, true
@@ -53,6 +59,7 @@ func (fakeSrc) ItemName(id string) (data.ItemName, bool) {
 	n, ok := map[string]data.ItemName{
 		"i_led": {Name: "Транспортир LEDX", Short: "LEDX"},
 		"i_key": {Name: "Ключ от КПП", Short: "КПП"},
+		"i_rub": {Name: "Рубли", Short: "RUB"},
 	}[id]
 	return n, ok
 }

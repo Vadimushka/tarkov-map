@@ -32,10 +32,23 @@ type LockPt struct {
 	NeedsPower bool
 }
 
-// NamedPt — рубильник или пулемёт.
+// NamedPt — пулемёт или остановка БТР.
 type NamedPt struct {
 	Pt
 	Name string
+}
+
+// SwitchPt — рубильник; Activates — id того, что он открывает (другие рубильники, двери).
+type SwitchPt struct {
+	Pt
+	ID, Name  string
+	Activates []string
+}
+
+// SpawnPt — точка появления; Kind: pmc | scav | sniper.
+type SpawnPt struct {
+	Pt
+	Kind string
 }
 
 type HazardArea struct {
@@ -62,10 +75,12 @@ type MapContent struct {
 	Items        map[string]data.ItemName // только предметы, встречающиеся в Loot этой карты
 	ItemsMissing bool                     // на карте есть лут, но ни одного названия
 	Locks        []LockPt
-	Switches     []NamedPt
+	Switches     []SwitchPt
 	Hazards      []HazardArea
 	Weapons      []NamedPt
 	Bosses       []BossPt
+	Spawns       []SpawnPt
+	BTR          []NamedPt
 }
 
 func (c *Core) Content() MapContent {
@@ -74,8 +89,8 @@ func (c *Core) Content() MapContent {
 	g := c.shown()
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
 	m := MapContent{MapID: g.gm.NormalizedName, Gen: c.gen, Places: []PlacePt{}, Containers: []ContainerPt{},
-		Loot: []LootPt{}, Items: map[string]data.ItemName{}, Locks: []LockPt{}, Switches: []NamedPt{},
-		Hazards: []HazardArea{}, Weapons: []NamedPt{}, Bosses: []BossPt{}}
+		Loot: []LootPt{}, Items: map[string]data.ItemName{}, Locks: []LockPt{}, Switches: []SwitchPt{},
+		Hazards: []HazardArea{}, Weapons: []NamedPt{}, Bosses: []BossPt{}, Spawns: []SpawnPt{}, BTR: []NamedPt{}}
 	if !g.supported {
 		return m
 	}
@@ -109,15 +124,16 @@ func (c *Core) Content() MapContent {
 		m.Locks = append(m.Locks, LockPt{Pt: at(l.Pos), Kind: l.Kind, Key: key.Name, NeedsPower: l.NeedsPower})
 	}
 	for _, s := range g.gm.Switches {
-		m.Switches = append(m.Switches, NamedPt{Pt: at(s.Pos), Name: s.Name})
+		m.Switches = append(m.Switches, SwitchPt{Pt: at(s.Pos), ID: s.ID, Name: s.Name, Activates: orEmpty(s.Activates)})
 	}
 	for _, h := range g.gm.Hazards {
-		a := HazardArea{Pt: at(h.Pos), Kind: h.Kind, Outline: [][2]float64{}}
-		for _, p := range h.Outline {
-			px, py := mapgeo.Project(d, p.X, p.Z)
-			a.Outline = append(a.Outline, [2]float64{px, py})
-		}
-		m.Hazards = append(m.Hazards, a)
+		m.Hazards = append(m.Hazards, HazardArea{Pt: at(h.Pos), Kind: h.Kind, Outline: outline(d, h.Outline)})
+	}
+	for _, s := range g.gm.Spawns {
+		m.Spawns = append(m.Spawns, SpawnPt{Pt: at(s.Pos), Kind: s.Kind})
+	}
+	for _, b := range g.gm.BTRStops {
+		m.BTR = append(m.BTR, NamedPt{Pt: at(b.Pos), Name: b.Name})
 	}
 	for _, w := range g.gm.Weapons {
 		m.Weapons = append(m.Weapons, NamedPt{Pt: at(w.Pos), Name: w.Name})
@@ -128,4 +144,21 @@ func (c *Core) Content() MapContent {
 		}
 	}
 	return m
+}
+
+// outline — контур в координатах карты; пустой контур — [], а не null.
+func outline(d mapgeo.MapDef, pts []mapgeo.Vec3) [][2]float64 {
+	out := [][2]float64{}
+	for _, p := range pts {
+		px, py := mapgeo.Project(d, p.X, p.Z)
+		out = append(out, [2]float64{px, py})
+	}
+	return out
+}
+
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

@@ -17,16 +17,22 @@ import (
 
 var ErrNoData = errors.New("в программе нет данных карт")
 
-// Extract — выход с карты. Faction: "pmc" | "scav" | "shared".
+// Extract — выход с карты. Faction: "pmc" | "scav" | "shared". Item и ItemCount — плата за
+// выход (id предмета, обычно рубли), Switches — id рубильников, которые его открывают.
 type Extract struct {
 	Name, Faction string
 	Pos           mapgeo.Vec3
 	Paid, Switch  bool
+	Outline       []mapgeo.Vec3
+	Item          string
+	ItemCount     int
+	Switches      []string
 }
 
 type Transit struct {
-	Name string
-	Pos  mapgeo.Vec3
+	Name    string
+	Pos     mapgeo.Vec3
+	Outline []mapgeo.Vec3
 }
 
 type GameMap struct {
@@ -40,6 +46,9 @@ type GameMap struct {
 	Hazards                             []Hazard
 	Weapons                             []Weapon
 	Bosses                              []Boss
+	Spawns                              []Spawn
+	BTRStops                            []NamedPos
+	RaidMinutes                         int // длительность рейда; 0 — неизвестна
 }
 
 // Варианты карт, у которых своей SVG нет.
@@ -294,16 +303,23 @@ type rawMap struct {
 	Name           string `json:"name"`
 	NormalizedName string `json:"normalizedName"`
 	ScenePath      string `json:"scenePath"`
+	RaidDuration   int    `json:"raidDuration"`
 	Extracts       []struct {
 		Name         string          `json:"name"`
 		Faction      string          `json:"faction"`
 		Switch       json.RawMessage `json:"switch"` // bool или id рубильника
+		Switches     []string        `json:"switches"`
 		Position     mapgeo.Vec3     `json:"position"`
-		TransferItem json.RawMessage `json:"transferItem"`
+		Outline      []mapgeo.Vec3   `json:"outline"`
+		TransferItem *struct {
+			Item  string `json:"item"`
+			Count int    `json:"count"`
+		} `json:"transferItem"`
 	} `json:"extracts"`
 	Transits []struct {
-		Description string      `json:"description"`
-		Position    mapgeo.Vec3 `json:"position"`
+		Description string        `json:"description"`
+		Position    mapgeo.Vec3   `json:"position"`
+		Outline     []mapgeo.Vec3 `json:"outline"`
 	} `json:"transits"`
 	rawContent
 }
@@ -325,13 +341,17 @@ func parseMaps(src fs.FS, mapsName, ruName string) (map[string]GameMap, error) {
 	tr := loadTranslations(src, ruName)
 	out := map[string]GameMap{}
 	for _, m := range raw.Data.Maps {
-		gm := GameMap{ID: m.ID, NormalizedName: m.NormalizedName, Name: tr(m.Name), ScenePath: m.ScenePath}
+		gm := GameMap{ID: m.ID, NormalizedName: m.NormalizedName, Name: tr(m.Name), ScenePath: m.ScenePath, RaidMinutes: m.RaidDuration}
 		for _, e := range m.Extracts {
-			paid := len(e.TransferItem) > 0 && string(e.TransferItem) != "null"
-			gm.Extracts = append(gm.Extracts, Extract{Name: tr(e.Name), Faction: e.Faction, Pos: e.Position, Paid: paid, Switch: switchFlag(e.Switch)})
+			x := Extract{Name: tr(e.Name), Faction: e.Faction, Pos: e.Position, Switch: switchFlag(e.Switch),
+				Outline: e.Outline, Switches: e.Switches}
+			if e.TransferItem != nil {
+				x.Paid, x.Item, x.ItemCount = true, e.TransferItem.Item, e.TransferItem.Count
+			}
+			gm.Extracts = append(gm.Extracts, x)
 		}
 		for _, t := range m.Transits {
-			gm.Transits = append(gm.Transits, Transit{Name: tr(t.Description), Pos: t.Position})
+			gm.Transits = append(gm.Transits, Transit{Name: tr(t.Description), Pos: t.Position, Outline: t.Outline})
 		}
 		fillContent(&gm, m.rawContent, raw.Data.rawRefs, tr)
 		out[m.ScenePath] = gm

@@ -73,3 +73,40 @@ func TestContentGenGrowsOnSetSource(t *testing.T) {
 		t.Errorf("ContentGen %d → %d, Content().Gen %d", g, v.ContentGen, c.Content().Gen)
 	}
 }
+
+func TestContentSpawnsBTRAndSwitchLinks(t *testing.T) {
+	c := New(fakeSrc{})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, Bundle: "maps/shopping_mall.bundle"})
+	m := c.Content()
+	if len(m.Spawns) != 2 || m.Spawns[1].Kind != "sniper" || m.Spawns[1].Layer != "Ground_Level" {
+		t.Errorf("Spawns = %+v", m.Spawns)
+	}
+	if len(m.BTR) != 1 || m.BTR[0].Name != "КПП USEC" {
+		t.Errorf("BTR = %+v", m.BTR)
+	}
+	if len(m.Switches) != 1 || m.Switches[0].ID != "sw1" || strings.Join(m.Switches[0].Activates, ",") != "sw2" {
+		t.Errorf("Switches = %+v", m.Switches)
+	}
+}
+
+func TestViewExtractDetails(t *testing.T) {
+	c := New(fakeSrc{})
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvMap, Bundle: "maps/shopping_mall.bundle"})
+	v := c.View()
+	if v.RaidMinutes != 40 {
+		t.Errorf("RaidMinutes = %d", v.RaidMinutes)
+	}
+	var e Marker
+	for _, m := range v.Markers {
+		if m.Kind == "extract" {
+			e = m
+		}
+	}
+	if len(e.Outline) != 3 || e.Need != "Рубли × 20 000" || strings.Join(e.Switches, ",") != "sw1" {
+		t.Errorf("выход = %+v", e)
+	}
+	b, _ := json.Marshal(v)
+	if strings.Contains(string(b), `"Outline":null`) || strings.Contains(string(b), `"Switches":null`) {
+		t.Errorf("пустые списки должны быть [], а не null: %s", b)
+	}
+}

@@ -35,8 +35,11 @@ type Marker struct {
 	Paid, Switch  bool
 	PX, PY        float64
 	Layer         string
-	DirX, DirY    float64 // shot: единичный вектор взгляда в координатах карты
-	Time          string  // shot
+	DirX, DirY    float64      // shot: единичный вектор взгляда в координатах карты
+	Time          string       // shot
+	Outline       [][2]float64 // extract, transit: зона в координатах карты
+	Need          string       // extract: плата за выход — «Рубли × 20 000»
+	Switches      []string     // extract: id рубильников, которые его открывают
 }
 
 // LayerInfo — этаж; первым идёт базовый слой с пустым Name.
@@ -49,6 +52,7 @@ type MapView struct {
 	Layers      []LayerInfo
 	Markers     []Marker
 	ContentGen  int // меняется, когда метки карты (Content) могли измениться
+	RaidMinutes int // длительность рейда на этой карте; 0 — неизвестна
 }
 
 // mapState — карта по сцене; supported — для неё есть SVG.
@@ -206,7 +210,8 @@ func (c *Core) View() MapView {
 	defer c.mu.Unlock()
 	m := c.shown()
 	// пустые списки, а не nil: фронтенд перебирает их без проверок
-	v := MapView{MapID: m.gm.NormalizedName, Name: m.gm.Name, Supported: m.supported, Layers: []LayerInfo{}, Markers: []Marker{}, ContentGen: c.gen}
+	v := MapView{MapID: m.gm.NormalizedName, Name: m.gm.Name, Supported: m.supported, Layers: []LayerInfo{}, Markers: []Marker{},
+		ContentGen: c.gen, RaidMinutes: m.gm.RaidMinutes}
 	if !m.supported {
 		return v
 	}
@@ -219,11 +224,13 @@ func (c *Core) View() MapView {
 	for _, e := range m.gm.Extracts {
 		px, py := mapgeo.Project(d, e.Pos.X, e.Pos.Z)
 		v.Markers = append(v.Markers, Marker{Kind: "extract", Name: e.Name, Faction: e.Faction, Paid: e.Paid, Switch: e.Switch,
-			PX: px, PY: py, Layer: mapgeo.LayerOf(d, e.Pos)})
+			PX: px, PY: py, Layer: mapgeo.LayerOf(d, e.Pos), Outline: outline(d, e.Outline), Need: c.price(e.Item, e.ItemCount),
+			Switches: orEmpty(e.Switches)})
 	}
 	for _, t := range m.gm.Transits {
 		px, py := mapgeo.Project(d, t.Pos.X, t.Pos.Z)
-		v.Markers = append(v.Markers, Marker{Kind: "transit", Name: t.Name, PX: px, PY: py, Layer: mapgeo.LayerOf(d, t.Pos)})
+		v.Markers = append(v.Markers, Marker{Kind: "transit", Name: t.Name, PX: px, PY: py, Layer: mapgeo.LayerOf(d, t.Pos),
+			Outline: outline(d, t.Outline), Switches: []string{}})
 	}
 	if m.scene != c.game.scene { // маршрут рейда — только на карте рейда
 		return v
@@ -237,7 +244,31 @@ func (c *Core) View() MapView {
 			dx, dy = dx/n, dy/n
 		}
 		v.Markers = append(v.Markers, Marker{Kind: "shot", Name: s.Name, PX: px, PY: py, Layer: mapgeo.LayerOf(d, s.Pos),
-			DirX: dx, DirY: dy, Time: s.Time})
+			DirX: dx, DirY: dy, Time: s.Time, Outline: [][2]float64{}, Switches: []string{}})
 	}
 	return v
+}
+
+// price — плата за выход по-русски: «Рубли × 20 000»; без платы — "".
+func (c *Core) price(item string, count int) string {
+	if item == "" {
+		return ""
+	}
+	name := item
+	if n, ok := c.src.ItemName(item); ok && n.Name != "" {
+		name = n.Name
+	}
+	if count <= 1 {
+		return name
+	}
+	return name + " × " + groupDigits(count)
+}
+
+// groupDigits: 20000 → «20 000» (неразрывный пробел не нужен — подпись в одну строку).
+func groupDigits(n int) string {
+	s := fmt.Sprint(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + " " + s[i:]
+	}
+	return s
 }

@@ -30,7 +30,21 @@ type Lock struct {
 	Pos        mapgeo.Vec3
 }
 
+// Switch — рубильник; Activates — id рубильников и дверей, которые он открывает.
 type Switch struct {
+	ID, Name  string
+	Pos       mapgeo.Vec3
+	Activates []string
+}
+
+// Spawn — точка появления. Kind: pmc | scav | sniper.
+type Spawn struct {
+	Kind string
+	Pos  mapgeo.Vec3
+}
+
+// NamedPos — подписанная точка: остановка БТР.
+type NamedPos struct {
 	Name string
 	Pos  mapgeo.Vec3
 }
@@ -108,9 +122,25 @@ type rawContent struct {
 		Position   mapgeo.Vec3 `json:"position"`
 	} `json:"locks"`
 	Switches []struct {
-		Name     string      `json:"name"`
-		Position mapgeo.Vec3 `json:"position"`
+		ID        string      `json:"id"`
+		Name      string      `json:"name"`
+		Position  mapgeo.Vec3 `json:"position"`
+		Activates []struct {
+			Switch string `json:"switch"`
+		} `json:"activates"`
 	} `json:"switches"`
+	Spawns []struct {
+		Position   mapgeo.Vec3 `json:"position"`
+		Sides      []string    `json:"sides"`
+		Categories []string    `json:"categories"`
+		ZoneName   string      `json:"zoneName"`
+	} `json:"spawns"`
+	BTRStops []struct {
+		Name string  `json:"name"`
+		X    float64 `json:"x"`
+		Y    float64 `json:"y"`
+		Z    float64 `json:"z"`
+	} `json:"btrStops"`
 	Hazards []struct {
 		HazardType string        `json:"hazardType"`
 		Position   mapgeo.Vec3   `json:"position"`
@@ -146,7 +176,19 @@ func fillContent(gm *GameMap, rc rawContent, refs rawRefs, tr func(string) strin
 		gm.Locks = append(gm.Locks, Lock{Kind: l.LockType, KeyID: l.Key, NeedsPower: l.NeedsPower, Pos: l.Position})
 	}
 	for _, s := range rc.Switches {
-		gm.Switches = append(gm.Switches, Switch{Name: tr(s.Name), Pos: s.Position})
+		sw := Switch{ID: s.ID, Name: tr(s.Name), Pos: s.Position}
+		for _, a := range s.Activates {
+			sw.Activates = append(sw.Activates, a.Switch)
+		}
+		gm.Switches = append(gm.Switches, sw)
+	}
+	for _, s := range rc.Spawns {
+		for _, kind := range spawnKinds(s.Sides, s.Categories, s.ZoneName) {
+			gm.Spawns = append(gm.Spawns, Spawn{Kind: kind, Pos: s.Position})
+		}
+	}
+	for _, b := range rc.BTRStops {
+		gm.BTRStops = append(gm.BTRStops, NamedPos{Name: tr(b.Name), Pos: mapgeo.Vec3{X: b.X, Y: b.Y, Z: b.Z}})
 	}
 	for _, h := range rc.Hazards {
 		gm.Hazards = append(gm.Hazards, Hazard{Kind: h.HazardType, Pos: h.Position, Outline: h.Outline})
@@ -174,6 +216,32 @@ func fillContent(gm *GameMap, rc rawContent, refs rawRefs, tr func(string) strin
 		}
 		gm.Bosses = append(gm.Bosses, boss)
 	}
+}
+
+// spawnKinds: «all» — точка и ЧВК, и Диких; зона со «sniper» в имени — снайперская. Точки только
+// для боссов пропускаются: их показывает слой боссов с шансами.
+func spawnKinds(sides, categories []string, zone string) []string {
+	people := false
+	for _, c := range categories {
+		people = people || c == "player" || c == "bot" || c == "botpmc"
+	}
+	if !people {
+		return nil
+	}
+	var out []string
+	for _, s := range sides {
+		if s == "pmc" || s == "all" {
+			out = append(out, "pmc")
+		}
+		if s == "scav" || s == "all" {
+			if strings.Contains(strings.ToLower(zone), "sniper") {
+				out = append(out, "sniper")
+			} else {
+				out = append(out, "scav")
+			}
+		}
+	}
+	return out
 }
 
 // ItemName — название предмета по-русски: полное и краткое.

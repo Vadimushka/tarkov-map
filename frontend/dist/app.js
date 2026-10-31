@@ -225,7 +225,12 @@
     TMap.setQuests(new Set(on.map((t) => t.ID)), questStatus);
     let sum = content ? `На карте ${on.length} из ${tasks.length}` : "";
     if (content && filters.quests_active && !knownStatus()) sum += " · в логах игры заданий нет, видны все";
+    // взятое раньше самой старой сохранённой сессии логов фильтр считает не взятым — сказать, сколько таких может быть
+    const unknown = filters.quests_active && knownStatus() ? tasks.filter((t) => !questStatus[t.ID]).length : 0;
+    if (unknown) sum += ` · без записей в логах: ${unknown}`;
     $("#quest-sum").textContent = sum;
+    $("#quest-sum").title = unknown ? "Задание, взятое раньше самой старой сохранённой сессии логов, считается не взятым. " +
+      "Снимите «Только активные», чтобы увидеть все задания карты." : "";
     renderQuestList();
   }
 

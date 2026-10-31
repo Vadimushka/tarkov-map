@@ -146,3 +146,23 @@ func TestSwitchOnEveryExtractIgnored(t *testing.T) {
 		t.Errorf("выходы = %s, want %s", strings.Join(got, ","), want)
 	}
 }
+
+// Снайпер — по зоне «snip…» или по категории sniper без player: в PvE-снимке Эпицентра у сотни
+// точек игроков categories ["player","sniper"], и слой «Снайперы» засыпало ромбами.
+func TestSpawnKinds(t *testing.T) {
+	for _, c := range []struct {
+		sides, cats []string
+		zone, want  string
+	}{
+		{[]string{"all"}, []string{"player", "sniper"}, "8f2c1d3e-uuid", "[pmc scav]"},
+		{[]string{"scav"}, []string{"bot", "sniper"}, "ZoneRoad", "[sniper]"},
+		{[]string{"scav"}, []string{"bot"}, "ZoneSnipeBrige", "[sniper]"},
+		{[]string{"all"}, []string{"player"}, "ZoneSniper", "[pmc sniper]"},
+		{[]string{"pmc"}, []string{"botpmc"}, "ZoneDormitory", "[pmc]"},
+		{[]string{"all"}, []string{"boss"}, "ZoneBrige", "[]"},
+	} {
+		if got := fmt.Sprint(spawnKinds(c.sides, c.cats, c.zone)); got != c.want {
+			t.Errorf("spawnKinds(%v, %v, %q) = %s, want %s", c.sides, c.cats, c.zone, got, c.want)
+		}
+	}
+}

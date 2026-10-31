@@ -42,7 +42,7 @@ type Marker struct {
 	Outline       [][2]float64 // extract, transit: зона в координатах карты
 	Need          string       // extract: плата за выход — «Рубли × 20 000»
 	Switches      []string     // extract: id рубильников, которые его открывают
-	Dist          int          // extract, transit: метры по горизонтали от последнего скрина рейда; -1 — скринов нет
+	Dist          int          // extract, transit: метры по горизонтали от последнего скрина идущего рейда; -1 — неизвестно
 }
 
 // LayerInfo — этаж; первым идёт базовый слой с пустым Name.
@@ -225,7 +225,7 @@ func (c *Core) View() MapView {
 	}
 	own := m.scene == c.game.scene // маршрут рейда — только на карте рейда
 	dist := func(p mapgeo.Vec3) int {
-		if !own || len(c.route) == 0 {
+		if !own || len(c.route) == 0 || !c.raidEnd.IsZero() { // после рейда игрок в меню или убежище
 			return -1
 		}
 		s := c.route[len(c.route)-1].Pos

@@ -78,24 +78,23 @@ func lineTime(s string) (time.Time, bool) {
 }
 
 // ScanQuests — состояние заданий по всем сессиям логов: режим → id задания → последнее событие
-// ("start" | "fail" | "done"). Режим уведомления — по последней строке Session mode перед ним.
-// Задания, взятые раньше самой старой сохранённой сессии, не видны.
+// ("start" | "fail" | "done"). Режим уведомления — по последней строке Session mode перед ним
+// в той же сессии. Задания, взятые раньше самой старой сохранённой сессии, не видны.
 func ScanQuests(logsDir string) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	entries, err := os.ReadDir(logsDir)
 	if err != nil {
 		return out
 	}
-	var sessions []string
-	for _, e := range entries {
-		if e.IsDir() {
-			sessions = append(sessions, e.Name())
+	// события всех сессий — по времени: по имени папки порядок неверен, час в нём без
+	// ведущего нуля (log_2026.10.30_9-00-00_… по строке позже log_2026.10.30_10-00-00_…)
+	var all []Event
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
 		}
-	}
-	sort.Strings(sessions) // log_2026.10.28_19-45-54_… — по времени запуска
-	for _, name := range sessions {
 		var evs []Event
-		dir := filepath.Join(logsDir, name)
+		dir := filepath.Join(logsDir, entry.Name())
 		for _, f := range logFiles(dir, "*application_*.log") {
 			eachLine(f, func(s string) {
 				if e, ok := ParseLine(s); ok && e.Kind == EvMode {
@@ -111,21 +110,30 @@ func ScanQuests(logsDir string) map[string]map[string]string {
 				}
 			})
 		}
-		sort.SliceStable(evs, func(i, j int) bool { return evs[i].At.Before(evs[j].At) })
+		byTime(evs)
 		mode := ""
 		for _, e := range evs {
 			switch {
 			case e.Kind == EvMode:
 				mode = e.Mode
 			case mode != "":
-				if out[mode] == nil {
-					out[mode] = map[string]string{}
-				}
-				out[mode][e.QuestID] = e.Status
+				e.Mode = mode
+				all = append(all, e)
 			}
 		}
 	}
+	byTime(all)
+	for _, e := range all {
+		if out[e.Mode] == nil {
+			out[e.Mode] = map[string]string{}
+		}
+		out[e.Mode][e.QuestID] = e.Status
+	}
 	return out
+}
+
+func byTime(evs []Event) {
+	sort.SliceStable(evs, func(i, j int) bool { return evs[i].At.Before(evs[j].At) })
 }
 
 // logFiles — файлы сессии по шаблону имени, по порядку (не filepath.Glob: скобки в пути к игре

@@ -91,6 +91,22 @@ func TestScanQuests(t *testing.T) {
 	}
 }
 
+// Час в имени папки сессии — без ведущего нуля: «_9-00-00» по строке больше «_10-00-00»,
+// но события утренней сессии должны идти раньше вечерней.
+func TestScanQuestsMorningSession(t *testing.T) {
+	logs := t.TempDir()
+	a := filepath.Join(logs, "log_2026.10.30_9-00-00_1.3.0.0.48484")
+	mkLog(t, a, "x application_000.log", "2026-10-30 09:00:05.000|1|Info|application|Session mode: Pve\n")
+	mkLog(t, a, "x push-notifications_000.log", note("2026-10-30 09:10:00.000", 10, "q1 description"))
+	b := filepath.Join(logs, "log_2026.10.30_10-00-00_1.3.0.0.48484")
+	mkLog(t, b, "x application_000.log", "2026-10-30 10:00:05.000|1|Info|application|Session mode: Pve\n")
+	mkLog(t, b, "x push-notifications_000.log", note("2026-10-30 10:10:00.000", 12, "q1 successMessageText"))
+
+	if got := fmt.Sprint(ScanQuests(logs)); got != "map[pve:map[q1:done]]" {
+		t.Errorf("ScanQuests = %s, want map[pve:map[q1:done]]", got)
+	}
+}
+
 // Хвост читает и уведомления; блок, дописанный за два опроса, не теряется.
 func TestTailerQuestNotifications(t *testing.T) {
 	logs := t.TempDir()

@@ -163,6 +163,11 @@ func TestExitDistance(t *testing.T) {
 	if d := dists(c.View()); d["Безопасная комната"] != 5 {
 		t.Errorf("карта игры, выбранная вручную: Dist = %v", d)
 	}
+	// рейд кончился — игрок в меню или убежище, до выхода идти некуда
+	c.OnLogEvent(gamelog.Event{Kind: gamelog.EvRaidEnd, At: at(21, 50, 0)})
+	if d := dists(c.View()); d["Безопасная комната"] != -1 {
+		t.Errorf("после рейда Dist = %v, want -1", d)
+	}
 }
 
 func TestDuplicateShot(t *testing.T) {

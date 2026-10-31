@@ -23,9 +23,13 @@ func fakeTarkovDev(t *testing.T, bodies map[string]string) *downloader {
 		"/pve/maps":           "pve_maps.json",
 		"/pve/maps_ru":        "pve_maps_ru.json",
 		"/pve/items_ru":       "pve_items_ru.json",
+		"/pve/tasks":          "pve_tasks.json",
+		"/pve/tasks_ru":       "pve_tasks_ru.json",
 		"/regular/maps":       "pve_maps.json",
 		"/regular/maps_ru":    "pve_maps_ru.json",
 		"/regular/items_ru":   "pve_items_ru.json",
+		"/regular/tasks":      "pve_tasks.json",
+		"/regular/tasks_ru":   "pve_tasks_ru.json",
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if b, ok := bodies[r.URL.Path]; ok && b != "" {
@@ -64,6 +68,9 @@ func TestRunBuildsSnapshot(t *testing.T) {
 		if err := s.Load(mode); err != nil {
 			t.Fatalf("%s: %v", mode, err)
 		}
+		if len(s.Tasks("5714dbc024597771384a510d")) == 0 {
+			t.Errorf("%s: нет заданий", mode)
+		}
 		if _, ok := s.ItemName("i_led"); !ok {
 			t.Errorf("%s: нет названий предметов", mode)
 		}
@@ -94,6 +101,8 @@ func TestRunRejectsBrokenFiles(t *testing.T) {
 		"битые названия":  {"/pve/items_ru": `{"data": {"i_led Name": "LEDX"`},
 		"пустые названия": {"/regular/items_ru": `{"errors": ["rate limit"]}`},
 		"SVG — не SVG":    {"/fb/Factory.svg": "<html>502 Bad Gateway</html>"},
+		"пустые задания":  {"/pve/tasks": `{"errors": ["rate limit"]}`},
+		"нет заданий":     {"/regular/tasks": ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "data.zip")

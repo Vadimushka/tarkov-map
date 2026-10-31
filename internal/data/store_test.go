@@ -23,6 +23,8 @@ func snapshot(t *testing.T) fstest.MapFS {
 		"pve_maps.json":       "testdata/pve_maps.json",
 		"pve_maps_ru.json":    "testdata/pve_maps_ru.json",
 		"pve_items_ru.json":   "testdata/pve_items_ru.json",
+		"pve_tasks.json":      "testdata/pve_tasks.json",
+		"pve_tasks_ru.json":   "testdata/pve_tasks_ru.json",
 		"svg/Interchange.svg": "testdata/Interchange.svg",
 	} {
 		b, err := os.ReadFile(src)

@@ -33,10 +33,10 @@ func newDownloader(client *http.Client) *downloader {
 	}
 }
 
-// mode скачивает файлы режима ("pve" | "regular"). Названия предметов обязательны:
-// без них у друга не заработает поиск лута.
+// mode скачивает файлы режима ("pve" | "regular"). Названия предметов и задания обязательны:
+// без них у друга не заработают поиск лута и квесты.
 func (d *downloader) mode(dir, mode string) error {
-	for _, f := range []string{"maps", "maps_ru", "items_ru"} {
+	for _, f := range []string{"maps", "maps_ru", "items_ru", "tasks", "tasks_ru"} {
 		name := mode + "_" + f + ".json"
 		if err := d.save(d.jsonBase+"/"+mode+"/"+f, filepath.Join(dir, name), nil); err != nil {
 			return fmt.Errorf("%s: %w", name, err)

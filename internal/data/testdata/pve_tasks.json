@@ -1,0 +1,86 @@
+{
+  "data": {
+    "tasks": {
+      "t_ic": {
+        "id": "t_ic",
+        "name": "t_ic name",
+        "normalizedName": "mall-task",
+        "trader": "54cb50c76803fa8b248b4571",
+        "map": null,
+        "kappaRequired": true,
+        "objectives": [
+          {
+            "id": "o_visit",
+            "description": "o_visit",
+            "type": "visit",
+            "optional": false,
+            "maps": ["5714dbc024597771384a510d", "5b0fc42d86f7744a585f9105"],
+            "zones": [
+              {"map": "5714dbc024597771384a510d", "position": {"x": 10, "y": 30, "z": 20},
+               "outline": [{"x": 0, "y": 30, "z": 0}, {"x": 20, "y": 30, "z": 0}, {"x": 20, "y": 30, "z": 40}],
+               "top": 33, "bottom": 27},
+              {"map": "5b0fc42d86f7744a585f9105", "position": {"x": 1, "y": 0, "z": 1},
+               "outline": [{"x": 0, "y": 0, "z": 0}, {"x": 2, "y": 0, "z": 0}, {"x": 2, "y": 0, "z": 2}],
+               "top": 3, "bottom": -1}
+            ]
+          },
+          {
+            "id": "o_find",
+            "description": "o_find",
+            "type": "findQuestItem",
+            "optional": true,
+            "maps": ["5714dbc024597771384a510d"],
+            "possibleLocations": [
+              {"map": "5714dbc024597771384a510d", "positions": [{"x": 5, "y": 1, "z": 6}, {"x": 7, "y": 1, "z": 8}]}
+            ],
+            "questItem": "qi_flash",
+            "requiredKeys": [["i_key", "i_nokey"]]
+          },
+          {
+            "id": "o_shoot",
+            "description": "o_shoot",
+            "type": "shoot",
+            "optional": false,
+            "maps": ["5714dbc024597771384a510d"]
+          }
+        ]
+      },
+      "t_lab": {
+        "id": "t_lab",
+        "name": "t_lab name",
+        "normalizedName": "lab-task",
+        "trader": "5c0647fdd443bc2504c2d371",
+        "map": "5b0fc42d86f7744a585f9105",
+        "kappaRequired": false,
+        "objectives": [
+          {"id": "o_lab", "description": "o_lab", "type": "visit", "optional": false, "maps": ["5b0fc42d86f7744a585f9105"]}
+        ]
+      },
+      "t_hideout": {
+        "id": "t_hideout",
+        "name": "t_hideout name",
+        "normalizedName": "hideout-task",
+        "trader": "54cb57776803fa99248b456e",
+        "map": null,
+        "kappaRequired": false,
+        "objectives": [
+          {"id": "o_give", "description": "o_give", "type": "giveItem", "optional": false, "maps": []}
+        ]
+      },
+      "t_untranslated": {
+        "id": "t_untranslated",
+        "name": "t_untranslated name",
+        "normalizedName": "only-map",
+        "trader": "unknown-trader",
+        "map": "5714dbc024597771384a510d",
+        "kappaRequired": false,
+        "objectives": [
+          {"id": "o_extract", "description": "o_extract", "type": "extract", "optional": false, "maps": []}
+        ]
+      }
+    },
+    "questItems": {
+      "qi_flash": {"id": "qi_flash", "name": "qi_flash Name"}
+    }
+  }
+}

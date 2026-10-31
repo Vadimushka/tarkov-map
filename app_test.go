@@ -52,6 +52,9 @@ func TestSeedZipComplete(t *testing.T) {
 		if s.ItemCount() == 0 {
 			t.Errorf("%s: нет названий предметов", mode)
 		}
+		if s.TaskCount() == 0 {
+			t.Errorf("%s: нет заданий", mode)
+		}
 	}
 	defs := s.SVGDefs()
 	if len(defs) < 10 {

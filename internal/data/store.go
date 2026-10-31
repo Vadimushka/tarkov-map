@@ -60,7 +60,8 @@ var aliases = map[string]string{
 
 // Store — данные одного режима из снимка. Файлы снимка: maps.json, {mode}_maps.json,
 // {mode}_maps_ru.json, {mode}_items_ru.json (необязателен: без него нет только поиска
-// лута) и svg/<имя>.svg.
+// лута), {mode}_tasks.json и {mode}_tasks_ru.json (необязательны: без них нет квестов)
+// и svg/<имя>.svg.
 type Store struct {
 	src fs.FS
 
@@ -71,6 +72,9 @@ type Store struct {
 	labels  map[string][]Label
 	items   map[string]ItemName
 	updated time.Time
+
+	tasks     map[string][]Task // по id карты
+	taskCount int
 }
 
 // NewStore читает снимок src; nil — снимка нет, Load вернёт ErrNoData.
@@ -99,12 +103,14 @@ func (s *Store) Load(mode string) error {
 		return noData(mode+"_maps.json", err)
 	}
 	items := parseItems(s.src, mode+"_items_ru.json")
+	tasks, taskCount := parseTasks(s.src, mode+"_tasks.json", mode+"_tasks_ru.json", items)
 	var updated time.Time
 	if st, err := fs.Stat(s.src, mode+"_maps.json"); err == nil {
 		updated = st.ModTime()
 	}
 	s.mu.Lock()
 	s.mode, s.defs, s.labels, s.items, s.byScene, s.updated = mode, defs, labels, items, maps, updated
+	s.tasks, s.taskCount = tasks, taskCount
 	s.mu.Unlock()
 	return nil
 }

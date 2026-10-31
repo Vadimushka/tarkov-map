@@ -1,5 +1,5 @@
 // Команда seed собирает снимок данных tarkov.dev, который встраивается в exe:
-// карты и метки обоих режимов, русские названия и все SVG-карты.
+// карты и метки обоих режимов, задания, русские названия и все SVG-карты.
 //
 //	go run ./scripts/seed            # → assets/data.zip
 //
@@ -53,6 +53,9 @@ func run(out string, d *downloader) error {
 		// битый или пустой ответ разбор молча пропускает, а без названий у друга не будет поиска лута
 		if s.ItemCount() == 0 {
 			return fmt.Errorf("%s: в названиях предметов пусто", mode)
+		}
+		if s.TaskCount() == 0 {
+			return fmt.Errorf("%s: в заданиях пусто", mode)
 		}
 	}
 	for _, def := range s.SVGDefs() {

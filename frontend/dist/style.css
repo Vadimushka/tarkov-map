@@ -6,6 +6,8 @@
   --loot-hit: #ffe14d;
   --hazard: #ff6b4a; --sniper: #ffaa00; --place: #cfc8b4;
   --quest: #4dd0e1;
+  /* доли в кольце группы меток */
+  --lock: #9fb7c9; --switch: #b7e35a; --weapon: #c7c2b8; --boss: #ff4d6d; --btr: #8fa35a;
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
 body { display: flex; flex-direction: column; }

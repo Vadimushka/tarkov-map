@@ -152,9 +152,9 @@ window.TMap = (() => {
   // обхода атрибутов). Подсказки — одна пара обработчиков на все слои.
   const LAYERS = ["hazards", "places", "spawn_scav", "spawn_sniper", "spawn_pmc", "c_misc", "c_body", "c_cache", "c_tech",
     "c_med", "c_safe", "c_weapon", "loot_all", "locks", "switches", "weapons", "btr", "bosses", "quests", "loot_hit"];
-  // ключ → {g, pins, built, on, upp, cg (кружки группировки), cpins, cupp, cfloor}
+  // ключ → {key, g, pins, built, on, upp}
   const layers = {};
-  for (const k of LAYERS) layers[k] = { g: el("g", { style: "display:none" }, content), pins: [], built: false, on: false, upp: 0, cpins: [] };
+  for (const k of LAYERS) layers[k] = { key: k, g: el("g", { style: "display:none" }, content), pins: [], built: false, on: false, upp: 0 };
   const tipOf = new WeakMap(); // метка → () => текст подсказки
   let data = null;             // MapContent текущей карты
   let lootHits = null;         // Set индексов совпавших точек лута; null — поиска нет
@@ -356,8 +356,6 @@ window.TMap = (() => {
     tip.style.display = "none"; // метка под курсором могла исчезнуть, а mousemove не придёт
     L.g.replaceChildren();
     L.pins = [];
-    L.cpins = [];
-    L.cg = null;
     L.built = true;
     L.upp = upp;
     if (!data || !R) return;
@@ -417,31 +415,53 @@ window.TMap = (() => {
       }
     }
     dimNodes(L.g);
-    cluster(key);
+    if (CLUSTERED.has(key)) clusterLater();
   }
 
-  // --- группировка: метки ближе CLUSTER_PX на экране сливаются в кружок с числом ---
-  // Только своего этажа (чужие скрыты); на предельном приближении — все метки по отдельности.
-  // Пересобирается после масштаба (с задержкой: колесо крутят несколькими щелчками) и смены этажа.
+  // --- группировка, как на Яндекс Картах: точечные метки всех включённых слоёв ближе CLUSTER_PX
+  // на экране сливаются в кружок с числом, кольцо делится на доли типов их цветами. Только своего
+  // этажа (чужие скрыты); на предельном приближении — все метки по отдельности. Названия мест,
+  // контуры зон, выходы, маршрут и найденное поиском не группируются — они нужны всегда.
+  // Пересобирается после масштаба (с задержкой: колесо крутят несколькими щелчками), смены этажа и слоёв.
   const CLUSTER_PX = 22;
-  const CLUSTERED = new Set(["c_misc", "c_body", "c_cache", "c_tech", "c_med", "c_safe", "c_weapon", "loot_all", "quests"]);
-  const CLUSTER_COLOR = { loot_all: "--accent", quests: "--quest" }; // у контейнеров — --c-<группа>
+  // слой → [название в подсказке, цвет доли]
+  const KIND = {
+    c_weapon: ["оружейные", "--c-weapon"], c_med: ["медицина", "--c-med"], c_tech: ["техника", "--c-tech"],
+    c_safe: ["сейфы и кассы", "--c-safe"], c_cache: ["тайники", "--c-cache"], c_body: ["тела", "--c-body"],
+    c_misc: ["сумки и прочее", "--c-misc"], loot_all: ["лут на земле", "--accent"], locks: ["замки", "--lock"],
+    switches: ["рубильники", "--switch"], weapons: ["пулемёты", "--weapon"], bosses: ["боссы", "--boss"],
+    btr: ["остановки БТР", "--btr"], spawn_pmc: ["спавны ЧВК", "--pmc"], spawn_scav: ["спавны Диких", "--scav"],
+    spawn_sniper: ["спавны снайперов", "--sniper"], quests: ["задания", "--quest"],
+  };
+  const CLUSTERED = new Set(Object.keys(KIND));
+  const clusterG = content.insertBefore(el("g", {}, content), layers.loot_hit.g); // над слоями, под найденным
+  let cpins = []; // кружки групп
 
-  function cluster(key) {
-    const L = layers[key];
-    if (!CLUSTERED.has(key) || !L.built) return;
-    if (L.cg) L.cg.remove();
-    L.cg = el("g", {}, L.g);
-    L.cpins = [];
-    L.cupp = upp;
-    L.cfloor = floor;
-    for (const p of L.pins) p.g.classList.remove("clustered");
+  // clusterLater — пересобрать группы после текущих изменений: слои строятся пачкой, хватит одного раза
+  let clusterQueued = false;
+  function clusterLater() {
+    if (clusterQueued) return;
+    clusterQueued = true;
+    queueMicrotask(() => {
+      clusterQueued = false;
+      cluster();
+    });
+  }
+
+  function cluster() {
+    clusterG.replaceChildren();
+    cpins = [];
+    const all = [];
+    for (const key of CLUSTERED) {
+      const L = layers[key];
+      for (const p of L.pins) p.g.classList.remove("clustered");
+      if (L.on && L.built) for (const p of L.pins) if (p.layer === floor) all.push({ p, key });
+    }
     if (!vb || !sized() || vb.w <= (fullView().w / MAX_ZOOM) * 1.001) return;
     // жадно по сетке: метка входит в первую группу, чей центр ближе d, иначе начинает свою
     const d = CLUSTER_PX * upp, cells = new Map(), found = [];
-    for (const p of L.pins) {
-      if (p.layer !== floor) continue;
-      const cx = Math.floor(p.x / d), cy = Math.floor(p.y / d);
+    for (const m of all) {
+      const p = m.p, cx = Math.floor(p.x / d), cy = Math.floor(p.y / d);
       let into = null;
       for (let i = -1; i <= 1 && !into; i++) {
         for (let j = -1; j <= 1 && !into; j++) {
@@ -449,29 +469,42 @@ window.TMap = (() => {
         }
       }
       if (into) {
-        into.m.push(p);
+        into.m.push(m);
         continue;
       }
-      const c = { x: p.x, y: p.y, m: [p] }, k = cx + "," + cy;
+      const c = { x: p.x, y: p.y, m: [m] }, k = cx + "," + cy;
       found.push(c);
       if (!cells.has(k)) cells.set(k, []);
       cells.get(k).push(c);
     }
-    const color = css(CLUSTER_COLOR[key] || "--" + key.replace("_", "-"));
     for (const c of found) {
       if (c.m.length < 2) continue;
       let sx = 0, sy = 0;
-      for (const p of c.m) {
+      const kinds = new Map(); // слой → сколько его меток в группе, в порядке KIND
+      for (const { p, key } of c.m) {
         p.g.classList.add("clustered");
         sx += p.x;
         sy += p.y;
+        kinds.set(key, (kinds.get(key) || 0) + 1);
       }
-      const n = c.m.length, p = { g: el("g", { class: "cluster" }, L.cg), x: sx / n, y: sy / n };
-      L.cpins.push(p);
+      const n = c.m.length, r = n > 99 ? 13 : 11, p = { g: el("g", { class: "cluster" }, clusterG), x: sx / n, y: sy / n };
+      cpins.push(p);
       place(p);
-      el("circle", { r: n > 99 ? 13 : 11, fill: "rgba(20,19,15,.88)", stroke: color, "stroke-width": 2 }, p.g);
+      el("circle", { r, fill: "rgba(20,19,15,.88)" }, p.g);
+      // доли кольца: дуги одной окружности через stroke-dasharray, от «12 часов» по часовой
+      const len = 2 * Math.PI * r, order = [...kinds].sort((a, b) => b[1] - a[1]);
+      let off = 0;
+      for (const [key, cnt] of order) {
+        const arc = (len * cnt) / n;
+        el("circle", {
+          r, fill: "none", stroke: css(KIND[key][1]), "stroke-width": 2.5, transform: "rotate(-90)",
+          "stroke-dasharray": `${arc} ${len - arc}`, "stroke-dashoffset": -off,
+        }, p.g);
+        off += arc;
+      }
       el("text", { y: 4, "text-anchor": "middle" }, p.g).textContent = n;
-      tipOf.set(p.g, () => `${n} ${plural(n, "метка", "метки", "меток")} рядом — щёлкните, чтобы приблизить`);
+      const parts = order.map(([key, cnt]) => `${KIND[key][0]} — ${cnt}`).join("\n");
+      tipOf.set(p.g, () => `${n} ${plural(n, "метка", "метки", "меток")} рядом:\n${parts}\nщёлкните, чтобы приблизить`);
       onClick.set(p.g, () => zoomAt(p.x, p.y, 1 / 3, true));
     }
   }
@@ -479,24 +512,18 @@ window.TMap = (() => {
   let clusterTimer = 0;
   function reclusterSoon() {
     clearTimeout(clusterTimer);
-    clusterTimer = setTimeout(() => {
-      for (const k of CLUSTERED) {
-        const L = layers[k];
-        if (L.on && L.built && (L.cupp !== upp || L.cfloor !== floor)) cluster(k);
-      }
-    }, 120);
+    clusterTimer = setTimeout(cluster, 120);
   }
 
   function show(key, on) {
-    const L = layers[key];
+    const L = layers[key], changed = L.on !== on;
     L.on = on;
     if (on && !L.built) build(key);
     else if (on && L.upp !== upp) {
       L.pins.forEach(place);
-      L.cpins.forEach(place);
       L.upp = upp;
     }
-    if (on && L.built && CLUSTERED.has(key) && (L.cupp !== upp || L.cfloor !== floor)) cluster(key);
+    if (changed && CLUSTERED.has(key)) clusterLater(); // включённый слой вливается в группы, выключенный — уходит
     L.g.style.display = on ? "" : "none";
   }
 
@@ -504,9 +531,8 @@ window.TMap = (() => {
     const L = layers[key];
     L.g.replaceChildren();
     L.pins = [];
-    L.cpins = [];
-    L.cg = null;
     L.built = false;
+    if (CLUSTERED.has(key)) clusterLater();
   }
 
   function resetContent() {
@@ -760,7 +786,7 @@ window.TMap = (() => {
       g.classList.toggle("floor-dim", base && own);
     });
     dimNodes(overlay);
-    for (const k of CLUSTERED) if (layers[k].on && layers[k].built) cluster(k);
+    clusterLater();
   }
 
   // метки чужого этажа приглушены; названия мест не приглушаются, а подпись не базового
@@ -806,11 +832,11 @@ window.TMap = (() => {
       upp = u;
       pins.forEach(place);
       flashes.forEach(place);
+      cpins.forEach(place);
       for (const k of LAYERS) {
         const L = layers[k];
         if (L.on && L.built) {
           L.pins.forEach(place);
-          L.cpins.forEach(place);
           L.upp = upp;
         }
       }

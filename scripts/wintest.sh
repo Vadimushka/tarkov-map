@@ -8,4 +8,6 @@ shift
 out="build/test/$(basename "$pkg").test.exe"
 mkdir -p build/test
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c -o "$out" "./$pkg"
-"./$out" -test.v "$@"
+# из папки пакета, как go test: тесты читают testdata/ по относительному пути
+exe="$PWD/$out"
+cd "$pkg" && "$exe" -test.v "$@"

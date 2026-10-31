@@ -13,29 +13,35 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 body { display: flex; flex-direction: column; }
 
 /* верхняя панель: то, что нужно в рейде; в узком окне переносится на вторую строку */
-#bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; background: var(--panel);
+#bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; background: var(--panel);
   border-bottom: 1px solid var(--line); user-select: none; }
 #bar .spacer { flex: 1; }
 #bar select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 190px; }
 #bar .primary { border-color: var(--accent); color: #fff; }
 .seg { display: flex; }
-.seg label { border: 1px solid var(--line); padding: 4px 12px; cursor: pointer; }
+.seg label { position: relative; border: 1px solid var(--line); padding: 4px 12px; cursor: pointer; }
 .seg label:first-child { border-radius: 6px 0 0 6px; }
-.seg label:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+/* соседние рамки накладываются, а не пропадают: у выбранной кнопки видны все четыре края */
+.seg label:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 .seg input, .chip input, .mbtn input { position: absolute; opacity: 0; pointer-events: none; }
-.seg label:has(input:checked) { background: #3a362b; color: #fff; border-color: var(--accent); }
+.seg label:has(input:checked) { z-index: 1; background: #3a362b; color: #fff; border-color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.chip { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px; cursor: pointer;
+.chip { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 14px; padding: 3px 8px; cursor: pointer;
   color: var(--muted); white-space: nowrap; }
 .chip:has(input:checked) { background: #3a362b; color: #fff; border-color: #6d6450; }
 .chip:not(:has(input:checked)) .sw { opacity: .45; }
 .seg label:has(input:focus-visible), .chip:has(input:focus-visible), .mbtn:has(input:focus-visible) { outline: 2px solid var(--accent); }
-.search { display: flex; align-items: center; gap: 4px; }
+/* поиск резиновый: в окне 1280 px панель умещается в строку, тесно — сужается поле, а не переносится панель */
+.search { flex: 1 1 150px; max-width: 360px; display: flex; align-items: center; gap: 6px; }
+.search .q { position: relative; flex: 1; min-width: 80px; display: flex; }
 #loot-found { font-size: 11px; white-space: nowrap; }
-#loot-q { width: 170px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+#loot-q { flex: 1; width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 24px 4px 8px; font: inherit; }
 #loot-q:disabled { opacity: .6; }
-#loot-q::-webkit-search-cancel-button { display: none; } /* свой × рядом, второй не нужен */
-#loot-clear { padding: 2px 8px; }
+#loot-q::-webkit-search-cancel-button { display: none; } /* свой × в поле, второй не нужен */
+#loot-clear { position: absolute; right: 1px; top: 1px; bottom: 1px; border: none; background: none; color: var(--muted); padding: 0 7px; font-size: 15px; line-height: 1; }
+#loot-clear:hover { color: #fff; }
+#loot-q:placeholder-shown { padding-right: 8px; } /* × скрыт — подсказке нужно всё место */
+#loot-q:placeholder-shown + #loot-clear { visibility: hidden; }
 
 .ico { width: 14px; height: 14px; flex: none; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
@@ -56,9 +62,10 @@ label.empty { opacity: .45; }
 #floors label:has(input:checked), .mbtn:has(input:checked) { background: #3a362b; color: #fff; border-color: var(--accent); }
 #floors label:hover, .mbtn:hover:not(:disabled) { background: #3a362b; }
 
-/* окно «Слои и настройки»: справа над картой, без затемнения — карта рядом видна */
-#panel { position: absolute; z-index: 6; top: 6px; right: 6px; bottom: 6px; width: 420px; max-width: calc(100% - 12px); display: flex; flex-direction: column;
-  background: #1d1b16f5; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px #000a; user-select: none; }
+/* окно «Слои и настройки»: справа над картой, без затемнения — карта рядом видна. Высота по содержимому:
+   кнопки этажей и вида под коротким окном остаются доступны. Непрозрачное — сквозь него не читаются подписи карты */
+#panel { position: absolute; z-index: 6; top: 6px; right: 6px; max-height: calc(100% - 12px); width: 420px; max-width: calc(100% - 12px);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px #000a; user-select: none; }
 #panel[hidden] { display: none; }
 .phead { display: flex; align-items: center; border-bottom: 1px solid var(--line); padding: 4px 4px 0 8px; }
 .ptabs { display: flex; gap: 2px; flex: 1; }

@@ -139,6 +139,32 @@ func TestRaidFlow(t *testing.T) {
 	}
 }
 
+// Dist — метры по горизонтали от последнего скрина рейда; скринов нет — -1.
+func TestExitDistance(t *testing.T) {
+	dists := func(v MapView) map[string]int {
+		out := map[string]int{}
+		for _, m := range v.Markers {
+			if m.Kind != "shot" {
+				out[m.Name] = m.Dist
+			}
+		}
+		return out
+	}
+	c := inRaid()
+	if d := dists(c.View()); d["Безопасная комната"] != -1 || d["Переход на Таможню"] != -1 {
+		t.Errorf("без скринов Dist = %v, want -1", d)
+	}
+	c.OnShot(shot1, at(21, 6, 30))
+	c.OnShot(shot2, at(21, 36, 5)) // (-51.12, 47.90): до выхода (-48, 44) ≈ 5 м, до перехода (280, 435) ≈ 509 м
+	if d := dists(c.View()); d["Безопасная комната"] != 5 || d["Переход на Таможню"] != 509 {
+		t.Errorf("Dist = %v, want 5 и 509", d)
+	}
+	c.SelectMap("maps/shopping_mall.bundle")
+	if d := dists(c.View()); d["Безопасная комната"] != 5 {
+		t.Errorf("карта игры, выбранная вручную: Dist = %v", d)
+	}
+}
+
 func TestDuplicateShot(t *testing.T) {
 	c := inRaid()
 	c.OnShot(shot1, at(21, 6, 30))

@@ -666,6 +666,7 @@ window.TMap = (() => {
         const cond = [];
         if (m.Paid) cond.push(m.Need ? "плата: " + m.Need : "платный: нужны деньги или предмет");
         if (m.Switch) cond.push("сначала включить рубильник");
+        if (m.Dist >= 0) cond.push(meters(m.Dist));
         hover(g, [m.Name, FACTION[m.Faction] || m.Faction, ...cond].join(" · "), zone);
         onClick.set(g, () => openCard(exitCard(m, key, zone), m.PX, m.PY));
       } else if (m.Kind === "transit") {
@@ -673,8 +674,8 @@ window.TMap = (() => {
         const g = pin(groups.transit, m.PX, m.PY, m.Layer), key = "t:" + m.Name, zone = zoneOf(m, color, key);
         el("circle", { r: 6.5, fill: color, stroke: "#fff", "stroke-width": 1.5 }, g);
         label(g, m.Name, color);
-        hover(g, m.Name + " · переход на другую карту", zone);
-        onClick.set(g, () => openCard({ key, zone, title: m.Name, sub: "Переход на другую карту" }, m.PX, m.PY));
+        hover(g, m.Name + " · переход на другую карту" + (m.Dist >= 0 ? " · " + meters(m.Dist) : ""), zone);
+        onClick.set(g, () => openCard({ key, zone, title: m.Name, sub: "Переход на другую карту", lines: distLine(m) }, m.PX, m.PY));
       }
     }
 
@@ -729,8 +730,12 @@ window.TMap = (() => {
     return zone;
   }
 
+  // расстояние по прямой от последнего скрина: 120 м, 1,4 км
+  const meters = (d) => (d < 1000 ? d + " м" : (d / 1000).toFixed(1).replace(".", ",") + " км");
+  const distLine = (m) => (m.Dist >= 0 ? [meters(m.Dist) + " по прямой от последнего скрина"] : []);
+
   function exitCard(m, key, zone) {
-    const lines = [];
+    const lines = distLine(m);
     if (m.Paid) lines.push("Плата: " + (m.Need || "деньги или предмет"));
     const sw = data ? m.Switches.map((id) => data.Switches.find((s) => s.ID === id)).filter(Boolean) : [];
     if (m.Switch && !sw.length) lines.push("Сначала включить рубильник");
@@ -949,5 +954,5 @@ window.TMap = (() => {
   const onFloor = (fn) => (onFloorCb = fn);
 
   return { setSVG, clear, render, setContent, setLootQuery, setQuests, lootHitsElsewhere, setFloor, onFloor, setFilter, showPoint,
-    centerOn, keepInView, fit };
+    centerOn, keepInView, fit, meters };
 })();

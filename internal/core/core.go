@@ -42,6 +42,7 @@ type Marker struct {
 	Outline       [][2]float64 // extract, transit: зона в координатах карты
 	Need          string       // extract: плата за выход — «Рубли × 20 000»
 	Switches      []string     // extract: id рубильников, которые его открывают
+	Dist          int          // extract, transit: метры по горизонтали от последнего скрина рейда; -1 — скринов нет
 }
 
 // LayerInfo — этаж; первым идёт базовый слой с пустым Name.
@@ -222,18 +223,26 @@ func (c *Core) View() MapView {
 	for _, l := range d.Layers {
 		v.Layers = append(v.Layers, LayerInfo{ID: l.SVGLayer, Name: l.Name})
 	}
+	own := m.scene == c.game.scene // маршрут рейда — только на карте рейда
+	dist := func(p mapgeo.Vec3) int {
+		if !own || len(c.route) == 0 {
+			return -1
+		}
+		s := c.route[len(c.route)-1].Pos
+		return int(math.Round(math.Hypot(p.X-s.X, p.Z-s.Z)))
+	}
 	for _, e := range m.gm.Extracts {
 		px, py := mapgeo.Project(d, e.Pos.X, e.Pos.Z)
 		v.Markers = append(v.Markers, Marker{Kind: "extract", Name: e.Name, Faction: e.Faction, Paid: e.Paid, Switch: e.Switch,
 			PX: px, PY: py, Layer: mapgeo.LayerOf(d, e.Pos), Outline: outline(d, e.Outline), Need: c.price(e.Item, e.ItemCount),
-			Switches: orEmpty(e.Switches)})
+			Switches: orEmpty(e.Switches), Dist: dist(e.Pos)})
 	}
 	for _, t := range m.gm.Transits {
 		px, py := mapgeo.Project(d, t.Pos.X, t.Pos.Z)
 		v.Markers = append(v.Markers, Marker{Kind: "transit", Name: t.Name, PX: px, PY: py, Layer: mapgeo.LayerOf(d, t.Pos),
-			Outline: outline(d, t.Outline), Switches: []string{}})
+			Outline: outline(d, t.Outline), Switches: []string{}, Dist: dist(t.Pos)})
 	}
-	if m.scene != c.game.scene { // маршрут рейда — только на карте рейда
+	if !own {
 		return v
 	}
 	for _, s := range c.route {

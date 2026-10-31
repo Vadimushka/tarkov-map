@@ -52,6 +52,7 @@
       side = r.value;
       applySide();
       if (view) TMap.render(view, side);
+      showNearest();
       go().SetSide(side).catch(console.error);
     }),
   );
@@ -331,6 +332,7 @@
       dropContent();
       showMessage();
       showQuestList();
+      showNearest();
       return;
     }
     if (v.MapID !== mapID) {
@@ -345,6 +347,7 @@
         dropContent();
         showMessage();
         showQuestList();
+        showNearest();
         return;
       }
       viewError = "";
@@ -365,6 +368,7 @@
     TMap.render(v, side);
     applyFilters();
     showQuestList();
+    showNearest();
     const shots = v.Markers.filter((m) => m.Kind === "shot");
     // новый скрин — показать этаж, на котором он сделан, и при слежении удержать его в кадре
     if (shots.length > shotCount) {
@@ -451,6 +455,21 @@
     return two(Math.floor(t / HOUR)) + ":" + two(Math.floor((t % HOUR) / 60e3));
   }
   const when = (iso) => { const t = Date.parse(iso); return t > 0 ? t : 0; }; // нулевое время Go — 0001 год
+
+  // ближайший выход своей стороны или совместный — по прямой от последнего скрина рейда
+  function showNearest() {
+    const near = $("#near");
+    near.replaceChildren();
+    let best = null;
+    for (const m of view ? view.Markers : []) {
+      if (m.Kind === "extract" && m.Dist >= 0 && (m.Faction === side || m.Faction === "shared") && (!best || m.Dist < best.Dist)) best = m;
+    }
+    if (!best) return;
+    const b = document.createElement("b");
+    b.textContent = `${best.Name}${best.Paid ? " ₽" : ""}${best.Switch ? " ⚡" : ""} — ${TMap.meters(best.Dist)}`;
+    near.title = "Ближайший выход вашей стороны или совместный: по прямой от последнего скрина";
+    near.append("ближайший выход ", b, " · ");
+  }
 
   function tick() {
     const s = snapshot || {}, now = Date.now(), clock = $("#clock");

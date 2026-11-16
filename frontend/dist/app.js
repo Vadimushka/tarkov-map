@@ -204,18 +204,19 @@
   }
 
   // --- вкладка «Задания» ---
-  // На карте — отмеченные задания; «Только активные» оставляет взятые и не сданные по логам игры.
-  // Логов нет или в них нет заданий этого режима — фильтру не на что опереться, видны все.
+  // На карте — отмеченные задания; «Скрыть сданные» прячет сданные и проваленные — по логам игры и
+  // по цепочкам (это выводит Go). Без записи задание видно: его могли взять раньше, чем начинаются
+  // логи, а спрятать нужное хуже, чем показать лишнее.
   const QUEST_STATUS = { start: "взято", done: "сдано", fail: "провалено" };
   const questRank = (t) => ({ start: 0, done: 2, fail: 2 })[questStatus[t.ID]] ?? 1; // взятые наверху, сданные внизу
   let questStatus = {};          // id → "start" | "done" | "fail"
   let hiddenTasks = new Set();   // id снятых галочек — из настроек
   const questQ = $("#quest-q"), questList = $("#quests");
 
-  const knownStatus = () => Object.keys(questStatus).length > 0;
-  const passesActive = (t) => !filters.quests_active || !knownStatus() || questStatus[t.ID] === "start";
+  const closed = (t) => questStatus[t.ID] === "done" || questStatus[t.ID] === "fail";
+  const passesActive = (t) => !filters.quests_active || !closed(t);
 
-  // listed — задания в списке: фильтр «Только активные» и поиск по названию
+  // listed — задания в списке: фильтр «Скрыть сданные» и поиск по названию
   function listed() {
     if (!content) return [];
     const q = questQ.value.trim().toLowerCase().replaceAll("ё", "е");
@@ -228,13 +229,11 @@
     const on = tasks.filter((t) => passesActive(t) && !hiddenTasks.has(t.ID));
     TMap.setQuests(new Set(on.map((t) => t.ID)), questStatus);
     let sum = content ? `На карте ${on.length} из ${tasks.length}` : "";
-    if (content && filters.quests_active && !knownStatus()) sum += " · в логах игры заданий нет, видны все";
-    // взятое раньше самой старой сохранённой сессии логов фильтр считает не взятым — сказать, сколько таких может быть
-    const unknown = filters.quests_active && knownStatus() ? tasks.filter((t) => !questStatus[t.ID]).length : 0;
-    if (unknown) sum += ` · без записей в логах: ${unknown}`;
+    const taken = tasks.filter((t) => questStatus[t.ID] === "start").length;
+    if (taken) sum += ` · взято по логам: ${taken}`;
+    const hidden = filters.quests_active ? tasks.filter(closed).length : 0;
+    if (hidden) sum += ` · сданных скрыто: ${hidden}`;
     $("#quest-sum").textContent = sum;
-    $("#quest-sum").title = unknown ? "Задание, взятое раньше самой старой сохранённой сессии логов, считается не взятым. " +
-      "Снимите «Только активные», чтобы увидеть все задания карты." : "";
     renderQuestList();
   }
 
@@ -252,7 +251,7 @@
     if (!tasks.length) {
       let text = "На этой карте заданий нет";
       if (content && content.Tasks.length) {
-        text = questQ.value.trim() ? "Ничего не найдено" : "Взятых заданий на этой карте нет — снимите «Только активные», чтобы увидеть все";
+        text = questQ.value.trim() ? "Ничего не найдено" : "Все задания этой карты сданы — снимите «Скрыть сданные», чтобы увидеть их";
       }
       add(questList, "div", "empty", text);
       return;

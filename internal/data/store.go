@@ -73,7 +73,8 @@ type Store struct {
 	items   map[string]ItemName
 	updated time.Time
 
-	tasks     map[string][]Task // по id карты
+	tasks     map[string][]Task    // по id карты
+	requires  map[string][]TaskReq // по id задания, у всех заданий режима
 	taskCount int
 }
 
@@ -103,14 +104,14 @@ func (s *Store) Load(mode string) error {
 		return noData(mode+"_maps.json", err)
 	}
 	items := parseItems(s.src, mode+"_items_ru.json")
-	tasks, taskCount := parseTasks(s.src, mode+"_tasks.json", mode+"_tasks_ru.json", items)
+	tasks, requires, taskCount := parseTasks(s.src, mode+"_tasks.json", mode+"_tasks_ru.json", items)
 	var updated time.Time
 	if st, err := fs.Stat(s.src, mode+"_maps.json"); err == nil {
 		updated = st.ModTime()
 	}
 	s.mu.Lock()
 	s.mode, s.defs, s.labels, s.items, s.byScene, s.updated = mode, defs, labels, items, maps, updated
-	s.tasks, s.taskCount = tasks, taskCount
+	s.tasks, s.requires, s.taskCount = tasks, requires, taskCount
 	s.mu.Unlock()
 	return nil
 }

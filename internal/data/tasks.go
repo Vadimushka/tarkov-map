@@ -27,6 +27,11 @@ type Objective struct {
 	Keys     []string      // нужные ключи; у каждого — варианты через «или»
 }
 
+// TaskReq — требование задания к другому: каким должно быть то задание, чтобы это открылось.
+// Status: "done" — сдано (или «сдано или провалено» — тоже закрыто), "fail" — провалено,
+// "taken" — хотя бы взято («активно» или «активно или сдано»).
+type TaskReq struct{ ID, Status string }
+
 // Zone — область цели: контур и высоты, по которым определяется этаж.
 type Zone struct {
 	Pos         mapgeo.Vec3
@@ -66,7 +71,11 @@ type rawTask struct {
 	Trader         string  `json:"trader"`
 	Map            *string `json:"map"`
 	KappaRequired  bool    `json:"kappaRequired"`
-	Objectives     []struct {
+	Requirements   []struct {
+		Task   string   `json:"task"`
+		Status []string `json:"status"` // complete | active | failed, бывает два сразу
+	} `json:"taskRequirements"`
+	Objectives []struct {
 		ID                string    `json:"id"`
 		Description       string    `json:"description"`
 		Optional          bool      `json:"optional"`
@@ -82,12 +91,13 @@ type rawTask struct {
 }
 
 // parseTasks читает задания режима и раскладывает их по id карт: задание попадает на карту,
-// если оно на ней (map) или там есть его цель. Нет файла — заданий нет, остальное работает.
-func parseTasks(src fs.FS, name, ruName string, items map[string]ItemName) (map[string][]Task, int) {
-	out := map[string][]Task{}
+// если оно на ней (map) или там есть его цель. requires — требования всех заданий, и тех,
+// что без карты: цепочки идут через них. Нет файла — заданий нет, остальное работает.
+func parseTasks(src fs.FS, name, ruName string, items map[string]ItemName) (out map[string][]Task, requires map[string][]TaskReq, count int) {
+	out, requires = map[string][]Task{}, map[string][]TaskReq{}
 	b, err := fs.ReadFile(src, name)
 	if err != nil {
-		return out, 0 // снимок без заданий — квестов просто нет
+		return out, requires, 0 // снимок без заданий — квестов просто нет
 	}
 	var raw struct {
 		Data struct {
@@ -99,14 +109,14 @@ func parseTasks(src fs.FS, name, ruName string, items map[string]ItemName) (map[
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
 		log.Printf("задания %s: %v", name, err)
-		return out, 0
+		return out, requires, 0
 	}
 	var list []rawTask
 	if err := json.Unmarshal(raw.Data.Tasks, &list); err != nil {
 		var byID map[string]rawTask
 		if err := json.Unmarshal(raw.Data.Tasks, &byID); err != nil {
 			log.Printf("задания %s: %v", name, err)
-			return out, 0
+			return out, requires, 0
 		}
 		for _, t := range byID {
 			list = append(list, t)
@@ -120,6 +130,11 @@ func parseTasks(src fs.FS, name, ruName string, items map[string]ItemName) (map[
 		return fallback
 	}
 	for _, rt := range list {
+		for _, r := range rt.Requirements {
+			if st := reqStatus(r.Status); st != "" {
+				requires[rt.ID] = append(requires[rt.ID], TaskReq{ID: r.Task, Status: st})
+			}
+		}
 		maps := map[string]bool{}
 		if rt.Map != nil && *rt.Map != "" {
 			maps[*rt.Map] = true
@@ -166,7 +181,63 @@ func parseTasks(src fs.FS, name, ruName string, items map[string]ItemName) (map[
 			return ts[i].Name < ts[j].Name
 		})
 	}
-	return out, len(list)
+	return out, requires, len(list)
+}
+
+// reqStatus: статусы требования из снимка → TaskReq.Status; "" — из требования ничего не следует.
+func reqStatus(st []string) string {
+	has := map[string]bool{}
+	for _, s := range st {
+		has[s] = true
+	}
+	switch {
+	case has["active"]:
+		return "taken" // «активно» или «активно или сдано»: точно только то, что взято
+	case has["complete"]:
+		return "done" // в том числе «сдано или провалено»: так или иначе закрыто
+	case has["failed"]:
+		return "fail"
+	}
+	return ""
+}
+
+// inferQuestStatus дополняет статусы из логов тем, что следует из требований: у задания с
+// записью (взято, сдано, провалено) требования выполнены — и так дальше по цепочке. Логи
+// хранят немного сессий, и без этого сданное до самой старой выглядело бы невзятым.
+// Вывод «сдано» перекрывает устаревшее «взято», провал из логов не перекрывается. known не меняется.
+func inferQuestStatus(known map[string]string, requires map[string][]TaskReq) map[string]string {
+	out := make(map[string]string, len(known))
+	var queue []string
+	for id, st := range known {
+		out[id] = st
+		queue = append(queue, id)
+	}
+	seen := map[string]bool{}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		for _, r := range requires[id] {
+			switch cur := out[r.ID]; {
+			case r.Status == "done" && cur != "fail":
+				out[r.ID] = "done"
+			case r.Status == "fail" && cur != "done":
+				out[r.ID] = "fail"
+			}
+			queue = append(queue, r.ID) // и взятое, и закрытое когда-то открылось — его требования выполнены
+		}
+	}
+	return out
+}
+
+// InferQuestStatus — статусы заданий из логов вместе с тем, что из них следует по цепочкам.
+func (s *Store) InferQuestStatus(known map[string]string) map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return inferQuestStatus(known, s.requires)
 }
 
 // keyNames: [[id, id], [id]] → «Ключ А или Ключ Б», «Ключ В»; ключи без названия пропускаются.

@@ -8,6 +8,7 @@
         "trader": "54cb50c76803fa8b248b4571",
         "map": null,
         "kappaRequired": true,
+        "taskRequirements": [{"task": "t_hideout", "status": ["active", "complete"]}],
         "objectives": [
           {
             "id": "o_visit",
@@ -52,6 +53,7 @@
         "trader": "5c0647fdd443bc2504c2d371",
         "map": "5b0fc42d86f7744a585f9105",
         "kappaRequired": false,
+        "taskRequirements": [{"task": "t_ic", "status": ["complete"]}],
         "objectives": [
           {"id": "o_lab", "description": "o_lab", "type": "visit", "optional": false, "maps": ["5b0fc42d86f7744a585f9105"]}
         ]
@@ -63,6 +65,7 @@
         "trader": "54cb57776803fa99248b456e",
         "map": null,
         "kappaRequired": false,
+        "taskRequirements": [{"task": "t_untranslated", "status": ["complete"]}],
         "objectives": [
           {"id": "o_give", "description": "o_give", "type": "giveItem", "optional": false, "maps": []}
         ]

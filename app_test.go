@@ -102,6 +102,27 @@ func TestQuestStatus(t *testing.T) {
 	}
 }
 
+// Фронтенд получает статусы вместе с выведенными по цепочкам: взята «Врачебная тайна. Часть 3» —
+// значит, части 1 и 2 сданы, хотя в логах о них ничего нет.
+func TestQuestStatusInfersChain(t *testing.T) {
+	zr, err := zip.NewReader(bytes.NewReader(seedZip), int64(len(seedZip)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := data.NewStore(zr)
+	if err := s.Load("pve"); err != nil {
+		t.Fatal(err)
+	}
+	const part1, part2, part3 = "5a68661a86f774500f48afb0", "5a68663e86f774501078f78a", "5a68665c86f774255929b4c7"
+	a := &App{core: core.New(nil), store: s, mode: "pve", quests: map[string]map[string]string{"pve": {part3: "start"}}}
+	if got := a.GetQuestStatus(); got[part3] != "start" || got[part2] != "done" || got[part1] != "done" {
+		t.Errorf("статусы = %v", got)
+	}
+	if len(a.quests["pve"]) != 1 {
+		t.Errorf("выведенное попало в статусы из логов: %v", a.quests["pve"])
+	}
+}
+
 func TestSetHiddenTasks(t *testing.T) {
 	dir := t.TempDir()
 	a := &App{cfgDir: dir, set: settings.Load(dir)}

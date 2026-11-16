@@ -1,6 +1,7 @@
 package data
 
 import (
+	"maps"
 	"strings"
 	"testing"
 )
@@ -48,6 +49,40 @@ func TestTasksOfMap(t *testing.T) {
 	}
 	if s.TaskCount() != 4 {
 		t.Errorf("TaskCount = %d", s.TaskCount())
+	}
+}
+
+// Логи хранят немного сессий: что сдано до самой старой, в них не записано. Но взятое или
+// закрытое задание говорит о своих требованиях: «сдано» — сдано, «провалено» — провалено,
+// «активно» — взято (статуса нет, но сдано всё, что требовалось для него), и так по цепочке.
+func TestInferQuestStatus(t *testing.T) {
+	req := map[string][]TaskReq{
+		"c": {{ID: "b", Status: "done"}},
+		"b": {{ID: "a", Status: "done"}, {ID: "x", Status: "taken"}},
+		"x": {{ID: "y", Status: "done"}},
+		"e": {{ID: "f", Status: "fail"}},
+		"g": {{ID: "h", Status: "done"}},
+		"z": {{ID: "c", Status: "done"}}, // z без записи — о c ничего не говорит
+	}
+	known := map[string]string{"c": "start", "e": "done", "h": "fail", "g": "start", "a": "start"}
+	got := inferQuestStatus(known, req)
+	// a: запись «взято» устарела — его требует сданным взятое b; h: провал из логов не перекрывается
+	want := map[string]string{"c": "start", "b": "done", "a": "done", "y": "done", "e": "done", "f": "fail", "g": "start", "h": "fail"}
+	if !maps.Equal(got, want) {
+		t.Errorf("статусы = %v, want %v", got, want)
+	}
+	if len(known) != 5 {
+		t.Errorf("исходные статусы изменены: %v", known)
+	}
+}
+
+// Требования берутся из снимка: t_lab требует сданным t_ic, t_ic — «активным или сданным»
+// t_hideout, а тот — сданным t_untranslated.
+func TestStoreInferQuestStatus(t *testing.T) {
+	got := loaded(t).InferQuestStatus(map[string]string{"t_lab": "start"})
+	want := map[string]string{"t_lab": "start", "t_ic": "done", "t_untranslated": "done"}
+	if !maps.Equal(got, want) {
+		t.Errorf("статусы = %v, want %v", got, want)
 	}
 }
 

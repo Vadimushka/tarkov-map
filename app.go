@@ -361,15 +361,19 @@ func (a *App) SetLootQuery(q string) error {
 	return a.updateSettings(func(s *settings.Settings) { s.LootQuery = q })
 }
 
-// GetQuestStatus — задания режима игры по логам: id → "start" | "fail" | "done".
+// GetQuestStatus — задания режима игры по логам: id → "start" | "fail" | "done", вместе с тем,
+// что следует из них по цепочкам: сданное до самой старой сессии логов в них не записано.
 func (a *App) GetQuestStatus() map[string]string {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	out := map[string]string{}
+	known := map[string]string{}
 	for id, st := range a.quests[a.mode] {
-		out[id] = st
+		known[id] = st
 	}
-	return out
+	a.mu.Unlock()
+	if a.store == nil {
+		return known
+	}
+	return a.store.InferQuestStatus(known)
 }
 
 func (a *App) SetHiddenTasks(ids []string) error {

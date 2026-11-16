@@ -380,6 +380,12 @@ func (a *App) SetHiddenTasks(ids []string) error {
 	return a.updateSettings(func(s *settings.Settings) { s.HiddenTasks = ids })
 }
 
+// SetShownTasks — сданные по логам задания, которые всё равно показывать на карте: программа
+// могла ошибиться, а сданное по умолчанию на карте не видно.
+func (a *App) SetShownTasks(ids []string) error {
+	return a.updateSettings(func(s *settings.Settings) { s.ShownTasks = ids })
+}
+
 // SetPresets сохраняет наборы слоёв: имя без пробелов по краям, без имени — не набор,
 // у одинаковых имён остаётся последний (на месте первого).
 func (a *App) SetPresets(presets []settings.Preset) error {

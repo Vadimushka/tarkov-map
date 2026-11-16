@@ -10,7 +10,7 @@
     loot_all: false, locks: false, switches: false, hazards: false, weapons: false, bosses: false,
     spawn_pmc: false, spawn_scav: false, spawn_sniper: false, btr: false,
     // вкладка «Задания»
-    quests: true, quests_active: true,
+    quests: true,
   };
   const MODE = { pve: "PvE", regular: "PvP" };
 
@@ -63,7 +63,6 @@
       filters[key] = cb.checked;
       document.querySelectorAll(`[data-f="${key}"]`).forEach((x) => (x.checked = cb.checked));
       TMap.setFilter(key, cb.checked);
-      if (key === "quests_active") applyQuests();
       fillPresets();
       go().SetFilters(filters).catch(console.error);
     }),
@@ -204,100 +203,124 @@
   }
 
   // --- вкладка «Задания» ---
-  // На карте — отмеченные задания; «Скрыть сданные» прячет сданные и проваленные — по логам игры и
-  // по цепочкам (это выводит Go). Без записи задание видно: его могли взять раньше, чем начинаются
-  // логи, а спрятать нужное хуже, чем показать лишнее.
+  // Сданные и проваленные — по логам игры и по цепочкам (это выводит Go) — на карте не видны, а в
+  // списке собраны внизу в свёрнутую группу: видно, что программа скрыла, и если она ошиблась,
+  // задание можно включить флажком. Без записи в логах задание обычное: его могли взять раньше,
+  // чем начинаются логи, а спрятать нужное хуже, чем показать лишнее.
   const QUEST_STATUS = { start: "взято", done: "сдано", fail: "провалено" };
-  const questRank = (t) => ({ start: 0, done: 2, fail: 2 })[questStatus[t.ID]] ?? 1; // взятые наверху, сданные внизу
   let questStatus = {};          // id → "start" | "done" | "fail"
-  let hiddenTasks = new Set();   // id снятых галочек — из настроек
+  let hiddenTasks = new Set();   // id снятых флажков у обычных заданий — из настроек
+  let shownTasks = new Set();    // id включённых флажков у сданных — из настроек
+  let closedOpen = false;        // группа «Сданы по логам» раскрыта
   const questQ = $("#quest-q"), questList = $("#quests");
 
   const closed = (t) => questStatus[t.ID] === "done" || questStatus[t.ID] === "fail";
-  const passesActive = (t) => !filters.quests_active || !closed(t);
-
-  // listed — задания в списке: фильтр «Скрыть сданные» и поиск по названию
-  function listed() {
-    if (!content) return [];
-    const q = questQ.value.trim().toLowerCase().replaceAll("ё", "е");
-    return content.Tasks.filter((t) => passesActive(t) && (!q || t.Name.toLowerCase().replaceAll("ё", "е").includes(q)))
-      .sort((a, b) => questRank(a) - questRank(b));
+  const isOn = (t) => (closed(t) ? shownTasks.has(t.ID) : !hiddenTasks.has(t.ID));
+  function setOn(t, on) {
+    if (closed(t)) {
+      if (on) shownTasks.add(t.ID);
+      else shownTasks.delete(t.ID);
+    } else if (on) hiddenTasks.delete(t.ID);
+    else hiddenTasks.add(t.ID);
   }
+
+  // listed — задания под поиск по названию: обычные (взятые наверху) и сданные отдельно
+  function listed() {
+    if (!content) return { open: [], done: [] };
+    const q = questQ.value.trim().toLowerCase().replaceAll("ё", "е");
+    const all = content.Tasks.filter((t) => !q || t.Name.toLowerCase().replaceAll("ё", "е").includes(q));
+    const taken = (t) => (questStatus[t.ID] === "start" ? 0 : 1);
+    return { open: all.filter((t) => !closed(t)).sort((a, b) => taken(a) - taken(b)), done: all.filter(closed) };
+  }
+  // visible — то, что сейчас видно в списке: сданные — только при раскрытой группе
+  const visible = () => {
+    const { open, done } = listed();
+    return closedOpen ? open.concat(done) : open;
+  };
 
   function applyQuests() {
     const tasks = content ? content.Tasks : [];
-    const on = tasks.filter((t) => passesActive(t) && !hiddenTasks.has(t.ID));
+    const on = tasks.filter(isOn);
     TMap.setQuests(new Set(on.map((t) => t.ID)), questStatus);
     let sum = content ? `На карте ${on.length} из ${tasks.length}` : "";
     const taken = tasks.filter((t) => questStatus[t.ID] === "start").length;
     if (taken) sum += ` · взято по логам: ${taken}`;
-    const hidden = filters.quests_active ? tasks.filter(closed).length : 0;
-    if (hidden) sum += ` · сданных скрыто: ${hidden}`;
     $("#quest-sum").textContent = sum;
     renderQuestList();
   }
 
+  const add = (parent, tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text) n.textContent = text;
+    parent.appendChild(n);
+    return n;
+  };
+
   function renderQuestList() {
     const top = questList.scrollTop;
     questList.replaceChildren();
-    const add = (parent, tag, cls, text) => {
-      const n = document.createElement(tag);
-      if (cls) n.className = cls;
-      if (text) n.textContent = text;
-      parent.appendChild(n);
-      return n;
-    };
-    const tasks = listed();
-    if (!tasks.length) {
-      let text = "На этой карте заданий нет";
-      if (content && content.Tasks.length) {
-        text = questQ.value.trim() ? "Ничего не найдено" : "Все задания этой карты сданы — снимите «Скрыть сданные», чтобы увидеть их";
-      }
-      add(questList, "div", "empty", text);
+    const { open, done } = listed();
+    const searching = !!questQ.value.trim();
+    if (!open.length && !done.length) {
+      add(questList, "div", "empty", content && content.Tasks.length ? "Ничего не найдено" : "На этой карте заданий нет");
       return;
     }
-    for (const t of tasks) {
-      const box = add(questList, "div", "task" + (hiddenTasks.has(t.ID) ? " off" : ""));
-      const lab = add(box, "label");
-      const cb = add(lab, "input");
-      cb.type = "checkbox";
-      cb.checked = !hiddenTasks.has(t.ID);
-      cb.addEventListener("change", () => {
-        if (cb.checked) hiddenTasks.delete(t.ID);
-        else hiddenTasks.add(t.ID);
-        box.classList.toggle("off", !cb.checked);
-        saveHidden();
+    if (!open.length) add(questList, "div", "empty", searching ? "Среди несданных ничего не найдено" : "Все задания этой карты сданы");
+    for (const t of open) addTask(t);
+    if (done.length) {
+      const head = add(questList, "button", "group" + (closedOpen ? " open" : ""), `Сданы по логам: ${done.length}`);
+      head.title = "Сданные и проваленные по логам игры и те, что идут в цепочке раньше взятых. На карте их не видно; если программа ошиблась, включите задание флажком";
+      head.addEventListener("click", () => {
+        closedOpen = !closedOpen;
+        renderQuestList();
       });
-      const name = add(lab, "span", "name", t.Name);
-      const st = questStatus[t.ID];
-      if (st) add(name, "span", "st " + st, QUEST_STATUS[st]);
-      const meta = [t.Trader, t.Kappa ? "Каппа" : ""].filter(Boolean).join(" · ");
-      if (meta) add(box, "div", "meta", meta);
-      for (const o of t.Objectives) {
-        const p = o.Zones[0] || o.Points[0];
-        const row = add(box, "div", "obj" + (o.Optional ? " opt" : "") + (p ? " lnk" : ""), o.Text + (o.Optional ? " (необяз.)" : ""));
-        if (p) {
-          row.title = "Показать на карте";
-          row.addEventListener("click", () => TMap.showPoint(p.PX, p.PY, p.Layer));
-        }
-      }
+      if (closedOpen) for (const t of done) addTask(t);
     }
     questList.scrollTop = top;
   }
 
-  function saveHidden() {
-    applyQuests();
-    go().SetHiddenTasks([...hiddenTasks]).catch(console.error);
+  function addTask(t) {
+    const on = isOn(t);
+    const box = add(questList, "div", "task" + (on ? "" : " off"));
+    const lab = add(box, "label");
+    const cb = add(lab, "input");
+    cb.type = "checkbox";
+    cb.checked = on;
+    cb.addEventListener("change", () => {
+      setOn(t, cb.checked);
+      box.classList.toggle("off", !cb.checked);
+      saveTasks();
+    });
+    const name = add(lab, "span", "name", t.Name);
+    const st = questStatus[t.ID];
+    if (st) add(name, "span", "st " + st, QUEST_STATUS[st]);
+    const meta = [t.Trader, t.Kappa ? "Каппа" : ""].filter(Boolean).join(" · ");
+    if (meta) add(box, "div", "meta", meta);
+    for (const o of t.Objectives) {
+      const p = o.Zones[0] || o.Points[0];
+      const row = add(box, "div", "obj" + (o.Optional ? " opt" : "") + (p ? " lnk" : ""), o.Text + (o.Optional ? " (необяз.)" : ""));
+      if (p) {
+        row.title = "Показать на карте";
+        row.addEventListener("click", () => TMap.showPoint(p.PX, p.PY, p.Layer));
+      }
+    }
   }
 
-  // «Все» и «Ничего» — для заданий в списке (с учётом поиска), остальные не трогаются
+  function saveTasks() {
+    applyQuests();
+    go().SetHiddenTasks([...hiddenTasks]).catch(console.error);
+    go().SetShownTasks([...shownTasks]).catch(console.error);
+  }
+
+  // «Все» и «Ничего» — для заданий, видных в списке (с учётом поиска и свёрнутой группы)
   $("#quests-all").addEventListener("click", () => {
-    for (const t of listed()) hiddenTasks.delete(t.ID);
-    saveHidden();
+    for (const t of visible()) setOn(t, true);
+    saveTasks();
   });
   $("#quests-none").addEventListener("click", () => {
-    for (const t of listed()) hiddenTasks.add(t.ID);
-    saveHidden();
+    for (const t of visible()) setOn(t, false);
+    saveTasks();
   });
   questQ.addEventListener("input", renderQuestList);
 
@@ -588,10 +611,8 @@
   }
 
   function applyPreset(p) {
-    const active = filters.quests_active;
     for (const k in FILTER_DEFAULTS) filters[k] = k in p.Filters ? !!p.Filters[k] : FILTER_DEFAULTS[k];
     applyFilters();
-    if (active !== filters.quests_active) applyQuests();
     go().SetFilters(filters).catch(console.error);
     fillPresets();
   }
@@ -656,6 +677,7 @@
       for (const k in FILTER_DEFAULTS) filters[k] = k in saved ? !!saved[k] : FILTER_DEFAULTS[k];
       lootQ.value = st.LootQuery || "";
       hiddenTasks = new Set(st.HiddenTasks || []);
+      shownTasks = new Set(st.ShownTasks || []);
       presets = (st.Presets || []).map((p) => ({ Name: p.Name, Filters: p.Filters || {} }));
     } catch (e) {
       console.error(e);

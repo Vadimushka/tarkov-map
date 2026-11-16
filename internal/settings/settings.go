@@ -18,6 +18,7 @@ type Settings struct {
 	Filters           map[string]bool // ключи задаёт фронтенд
 	LootQuery         string          // строка поиска лута на земле
 	HiddenTasks       []string        // id заданий, снятых в списке заданий
+	ShownTasks        []string        // id сданных по логам заданий, включённых в списке всё равно
 	Presets           []Preset        // наборы слоёв, сохранённые пользователем
 	Window            *WindowPos
 }

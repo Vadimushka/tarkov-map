@@ -134,6 +134,23 @@ func TestSetHiddenTasks(t *testing.T) {
 	}
 }
 
+// Сданные по логам задания на карте не видны, пока их не включат флажком в группе «Сданы по
+// логам»; включённые хранятся отдельно от снятых, и одно не стирает другое.
+func TestSetShownTasks(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{cfgDir: dir, set: settings.Load(dir)}
+	if err := a.SetHiddenTasks([]string{"t1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetShownTasks([]string{"t2", "t3"}); err != nil {
+		t.Fatal(err)
+	}
+	got := settings.Load(dir)
+	if strings.Join(got.ShownTasks, ",") != "t2,t3" || strings.Join(got.HiddenTasks, ",") != "t1" {
+		t.Errorf("на диске включены %v, сняты %v", got.ShownTasks, got.HiddenTasks)
+	}
+}
+
 // Наборы слоёв: имя обрезается, пустое отбрасывается, у одинаковых имён остаётся последний.
 func TestSetPresets(t *testing.T) {
 	dir := t.TempDir()

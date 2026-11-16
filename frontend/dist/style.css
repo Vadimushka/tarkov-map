@@ -162,4 +162,9 @@ input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid
 #quests .obj.opt { color: var(--muted); }
 #quests .obj.lnk { color: var(--quest); cursor: pointer; }
 #quests .obj.lnk:hover { text-decoration: underline; }
+/* свёрнутая группа «Сданы по логам» внизу списка */
+#quests .group { display: block; width: 100%; margin: 8px 0 2px; text-align: left; color: var(--muted); background: transparent; border-color: transparent; padding: 4px 2px; }
+#quests .group::before { content: "▸ "; }
+#quests .group.open::before { content: "▾ "; }
+#quests .group:hover { color: var(--text); }
 .quest-pin text { fill: #071c1f; font-size: 11px; font-weight: 800; pointer-events: none; }

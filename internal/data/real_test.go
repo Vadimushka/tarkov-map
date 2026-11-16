@@ -30,11 +30,19 @@ func TestParseRealFiles(t *testing.T) {
 	if !ok || len(ic.Extracts) != 9 || len(ic.Transits) != 2 {
 		t.Errorf("Развязка: ok=%v выходов=%d переходов=%d", ok, len(ic.Extracts), len(ic.Transits))
 	}
-	// числа — по данным PvE от 29.10.2026; новый снимок — сверить и поправить
+	// числа — по данным PvE от 31.10.2026; новый снимок — сверить и поправить
 	if len(ic.Containers) != 823 || len(ic.Loose) != 492 || len(ic.Locks) != 15 || len(ic.Hazards) != 25 ||
-		len(ic.Switches) != 6 || len(ic.Weapons) != 2 || len(ic.Bosses) != 2 {
+		len(ic.Switches) != 6 || len(ic.Weapons) != 2 || len(ic.Bosses) != 1 {
 		t.Errorf("метки Развязки: контейнеров %d, лута %d, замков %d, зон %d, рубильников %d, пулемётов %d, боссов %d",
 			len(ic.Containers), len(ic.Loose), len(ic.Locks), len(ic.Hazards), len(ic.Switches), len(ic.Weapons), len(ic.Bosses))
+	}
+	// у каждого выхода — сторона: без неё выход не виден ни своим, ни совместным
+	for _, m := range maps {
+		for _, e := range m.Extracts {
+			if e.Faction != "pmc" && e.Faction != "scav" && e.Faction != "shared" {
+				t.Errorf("%s: у выхода %q сторона %q", m.NormalizedName, e.Name, e.Faction)
+			}
+		}
 	}
 	floors := map[string]int{}
 	for _, l := range labels["interchange"] {

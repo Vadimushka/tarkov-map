@@ -2,6 +2,8 @@ package data
 
 import (
 	"errors"
+	"fmt"
+	"maps"
 	"os"
 	"path"
 	"testing"
@@ -69,6 +71,38 @@ func TestLoadAndLookup(t *testing.T) {
 	}
 	if len(m.Transits) != 1 || m.Transits[0].Name != "Переход на Таможню" {
 		t.Errorf("Transits = %+v", m.Transits)
+	}
+}
+
+// У вариантов карт (Эпицентр 21+, ночной Завод) в снимке у выходов нет faction — без стороны
+// они не показывались ни своими, ни совместными. Сторона берётся у того же выхода основной
+// карты: по имени и ближайшей точке, потому что одноимённые выходы бывают разных сторон.
+func TestVariantExtractFaction(t *testing.T) {
+	src := fstest.MapFS{"m.json": {Data: []byte(`{"data":{"maps":{
+	  "1":{"normalizedName":"ground-zero","scenePath":"maps/sandbox_preset.bundle","extracts":[
+	    {"name":"Sandbox_VExit","faction":"pmc","position":{"x":-19.5,"y":0,"z":114.9}},
+	    {"name":"Gate 3","faction":"scav","position":{"x":58.7,"y":0,"z":60.9}},
+	    {"name":"Gate 3","faction":"pmc","position":{"x":58.4,"y":0,"z":63.3}}]},
+	  "2":{"normalizedName":"ground-zero-21","scenePath":"maps/sandbox_high_preset.bundle","extracts":[
+	    {"name":"Sandbox_VExit","position":{"x":-19.5,"y":0,"z":114.9}},
+	    {"name":"Gate 3","position":{"x":58.4,"y":0,"z":63.3}},
+	    {"name":"Gate 3","position":{"x":58.7,"y":0,"z":60.9}},
+	    {"name":"New_exit","position":{"x":0,"y":0,"z":0}}]}}}}`)}}
+	parsed, err := parseMaps(src, "m.json", "m_ru.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, e := range parsed["maps/sandbox_high_preset.bundle"].Extracts {
+		got[fmt.Sprintf("%s@%.0f", e.Name, e.Pos.Z)] = e.Faction
+	}
+	// незнакомый выход — совместный: лучше показать обеим сторонам, чем спрятать
+	want := map[string]string{"Sandbox_VExit@115": "pmc", "Gate 3@63": "pmc", "Gate 3@61": "scav", "New_exit@0": "shared"}
+	if !maps.Equal(got, want) {
+		t.Errorf("стороны выходов = %v, want %v", got, want)
+	}
+	if f := parsed["maps/sandbox_preset.bundle"].Extracts[1].Faction; f != "scav" {
+		t.Errorf("у основной карты сторона изменилась: %q", f)
 	}
 }
 

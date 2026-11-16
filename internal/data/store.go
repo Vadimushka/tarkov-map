@@ -367,7 +367,35 @@ func parseMaps(src fs.FS, mapsName, ruName string) (map[string]GameMap, error) {
 		fillContent(&gm, m.rawContent, raw.Data.rawRefs, tr)
 		out[m.ScenePath] = gm
 	}
+	fillVariantFactions(out)
 	return out, nil
+}
+
+// fillVariantFactions: у вариантов карт (Эпицентр 21+, ночной Завод) в снимке у выходов нет
+// faction, а без стороны выход не виден ни своим, ни совместным. Сторона берётся у выхода
+// основной карты (aliases) с тем же именем, ближайшего по месту: одноимённые выходы бывают
+// разных сторон — на Заводе два «Ворота 3». Не нашлось — совместный: лучше показать обеим сторонам.
+func fillVariantFactions(byScene map[string]GameMap) {
+	base := map[string][]Extract{}
+	for _, m := range byScene {
+		base[m.NormalizedName] = m.Extracts
+	}
+	for _, m := range byScene {
+		for i := range m.Extracts { // срез общий с картой в byScene — правка видна там
+			e := &m.Extracts[i]
+			if e.Faction != "" {
+				continue
+			}
+			e.Faction = "shared"
+			best := -1.0
+			for _, b := range base[aliases[m.NormalizedName]] {
+				dx, dz := b.Pos.X-e.Pos.X, b.Pos.Z-e.Pos.Z
+				if d := dx*dx + dz*dz; b.Name == e.Name && b.Faction != "" && (best < 0 || d < best) {
+					best, e.Faction = d, b.Faction
+				}
+			}
+		}
+	}
 }
 
 // dropSharedSwitches убирает рубильники, указанные у каждого выхода карты (от 5 выходов): так
